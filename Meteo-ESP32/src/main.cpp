@@ -11,8 +11,8 @@
 
 // location of firmware file on external web server
 // change to your actual .bin location
-#define HOST "http://mrkamalov.github.io/Meteo-ESP32/testFW.bin"
-
+#define HOST "https://mrkamalov.github.io/Meteo-ESP32/testFW.bin"
+void updateFirmware(uint8_t *data, size_t len);
 HTTPClient client;
 // Your WiFi credentials
 const char* ssid = "SG_RND";
