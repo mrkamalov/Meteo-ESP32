@@ -57,7 +57,7 @@ const char wifiSSID[] = "YourSSID";
 const char wifiPass[] = "YourWiFiPass";
 
 // Server details
-const char server[] = "https://mrkamalov.github.io";
+const char server[] = "mrkamalov.github.io";//https://
 const int  port     = 443;//80;
 
 #include <TinyGsmClient.h>
@@ -78,7 +78,7 @@ const int  port     = 443;//80;
 #define TINY_GSM_USE_WIFI false
 #endif
 
-const char resource[]    = "/Meteo-ESP32/logo.txt; //test_1k.bin";
+const char resource[]    = "/Meteo-ESP32/test_100k.bin";
 uint32_t   knownCRC32    = 0x6f50d767;
 uint32_t   knownFileSize = 1024;  // In case server does not send it
 
@@ -108,7 +108,7 @@ void setup() {
   SerialMon.println("Wait...");
 
   // Set GSM module baud rate
-  SerialAT.begin(9600, SERIAL_8N1, MODEM_RX, MODEM_TX);
+  SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
   delay(6000);
 
   // Restart takes quite some time
