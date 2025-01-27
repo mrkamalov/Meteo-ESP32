@@ -58,9 +58,10 @@ const char wifiPass[] = "YourWiFiPass";
 
 // Server details
 const char server[] = "https://mrkamalov.github.io";
-const int  port     = 80;
+const int  port     = 443;//80;
 
 #include <TinyGsmClient.h>
+#include <ArduinoHttpClient.h>
 #include <CRC32.h>
 
 // Just in case someone defined the wrong thing..
@@ -77,9 +78,9 @@ const int  port     = 80;
 #define TINY_GSM_USE_WIFI false
 #endif
 
-const char resource[]    = "/Meteo-ESP32/testFW.bin";
+const char resource[]    = "/Meteo-ESP32/logo.txt; //test_1k.bin";
 uint32_t   knownCRC32    = 0x6f50d767;
-uint32_t   knownFileSize = 262144;  // In case server does not send it
+uint32_t   knownFileSize = 1024;  // In case server does not send it
 
 #ifdef DUMP_AT_COMMANDS
 #include <StreamDebugger.h>
@@ -89,7 +90,8 @@ TinyGsm        modem(debugger);
 TinyGsm        modem(SerialAT);
 #endif
 
-TinyGsmClient client(modem);
+TinyGsmClientSecure client(modem);
+HttpClient          http(client, server, port);
 // Определите пины для подключения модема
 #define MODEM_RX 18
 #define MODEM_TX 17
@@ -172,7 +174,63 @@ void loop() {
   if (modem.isGprsConnected()) { SerialMon.println("GPRS connected"); }
 #endif
 
-  SerialMon.print(F("Connecting to "));
+  SerialMon.print(F("Performing HTTPS GET request... "));
+  http.connectionKeepAlive();  // Currently, this is needed for HTTPS
+  int err = http.get(resource);
+  if (err != 0) {
+    SerialMon.println(F("failed to connect"));
+    delay(10000);
+    return;
+  }
+
+  int status = http.responseStatusCode();
+  SerialMon.print(F("Response status code: "));
+  SerialMon.println(status);
+  if (!status) {
+    delay(10000);
+    return;
+  }
+
+  SerialMon.println(F("Response Headers:"));
+  while (http.headerAvailable()) {
+    String headerName  = http.readHeaderName();
+    String headerValue = http.readHeaderValue();
+    SerialMon.println("    " + headerName + " : " + headerValue);
+  }
+
+  int length = http.contentLength();
+  if (length >= 0) {
+    SerialMon.print(F("Content length is: "));
+    SerialMon.println(length);
+  }
+  if (http.isResponseChunked()) {
+    SerialMon.println(F("The response is chunked"));
+  }
+
+  String body = http.responseBody();
+  SerialMon.println(F("Response:"));
+  SerialMon.println(body);
+
+  SerialMon.print(F("Body length is: "));
+  SerialMon.println(body.length());
+
+  // Shutdown
+
+  http.stop();
+  SerialMon.println(F("Server disconnected"));
+
+#if TINY_GSM_USE_WIFI
+  modem.networkDisconnect();
+  SerialMon.println(F("WiFi disconnected"));
+#endif
+#if TINY_GSM_USE_GPRS
+  modem.gprsDisconnect();
+  SerialMon.println(F("GPRS disconnected"));
+#endif
+
+  // Do nothing forevermore
+  while (true) { delay(1000); }
+  /*SerialMon.print(F("Connecting to "));
   SerialMon.print(server);
   if (!client.connect(server, port)) {
     SerialMon.println(" fail");
@@ -182,7 +240,7 @@ void loop() {
   SerialMon.println(" success");
 
   // Make a HTTP GET request:
-  client.print(String("GET ") + resource + " HTTP/1.0\r\n");
+  client.print(String("GET ") + resource + " HTTPS/1.0\r\n");
   client.print(String("Host: ") + server + "\r\n");
   client.print("Connection: close\r\n\r\n");
 
@@ -212,15 +270,15 @@ void loop() {
         headerBuffer += c;
 
         // Uncomment the lines below to see the data coming into the buffer
-        // if (c < 16)
-        //   SerialMon.print('0');
-        // SerialMon.print(c, HEX);
-        // SerialMon.print(' ');
-        // if (isprint(c))
-        //   SerialMon.print(reinterpret_cast<char> c);
-        // else
-        //   SerialMon.print('*');
-        // SerialMon.print(' ');
+        if (c < 16)
+          SerialMon.print('0');
+        //SerialMon.print(c, HEX);
+        //SerialMon.print(' ');
+        if (isprint(c))
+          SerialMon.print(c);
+        else
+          SerialMon.print('*');
+        //SerialMon.print(' ');
 
         // Let's exit and process if we find a new line
         if (headerBuffer.indexOf(F("\r\n")) >= 0) break;
@@ -264,6 +322,21 @@ void loop() {
 
   uint32_t readLength = 0;
   CRC32    crc;
+ /* uint32_t bytesReceived = 0;
+  while (client.available()) {
+        uint8_t c = client.read();
+        bytesReceived++;
+        if (c < 16)
+          SerialMon.print('0');
+          SerialMon.print(c, HEX);
+          SerialMon.print(' ');
+        if (isprint(c))
+          SerialMon.print(c);
+        else
+          SerialMon.print('*');
+        SerialMon.print(' ');
+  }
+  SerialMon.printf("Bytes received: %d\n", bytesReceived);
 
   if (finishedHeader && contentLength == knownFileSize) {
     SerialMon.println(F("Reading response data"));
@@ -320,5 +393,5 @@ void loop() {
   SerialMon.println("s");
 
   // Do nothing forevermore
-  while (true) { delay(1000); }
+  while (true) { delay(1000); }*/
 }
