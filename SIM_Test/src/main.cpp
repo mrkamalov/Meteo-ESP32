@@ -12,7 +12,8 @@
  * so this is for more experienced developers.
  *
  **************************************************************/
-
+#include <SPIFFS.h>
+#include <Update.h>
 // Select your modem:
 #define TINY_GSM_MODEM_SIM800
 #include <HardwareSerial.h>
@@ -59,6 +60,8 @@ const char wifiPass[] = "YourWiFiPass";
 // Server details
 const char server[] = "mrkamalov.github.io";//https://
 const int  port     = 443;//80;
+const char* firmware_file_path = "/firmware.bin"; // Path for saving the firmware
+uint32_t expected_crc32 = 0x6f50d767; // Example CRC32 checksum
 
 #include <TinyGsmClient.h>
 #include <ArduinoHttpClient.h>
@@ -78,7 +81,7 @@ const int  port     = 443;//80;
 #define TINY_GSM_USE_WIFI false
 #endif
 
-const char resource[]    = "/Meteo-ESP32/test_100k.bin";
+const char resource[]    = "/Meteo-ESP32/test_50k.bin";
 uint32_t   knownCRC32    = 0x6f50d767;
 uint32_t   knownFileSize = 1024;  // In case server does not send it
 
@@ -92,6 +95,9 @@ TinyGsm        modem(SerialAT);
 
 TinyGsmClientSecure client(modem);
 HttpClient          http(client, server, port);
+bool saveFirmwareToSPIFFS(const String& data);
+bool verifyFirmwareChecksum(const char* filePath, uint32_t expectedCRC);
+bool writeFirmwareToOTA(const char* filePath);
 // Определите пины для подключения модема
 #define MODEM_RX 18
 #define MODEM_TX 17
@@ -101,6 +107,13 @@ void setup() {
   SerialMon.begin(115200);
   delay(10);
   
+  // Initialize SPIFFS
+  if (!SPIFFS.begin(true)) {
+    Serial.println("SPIFFS initialization failed");
+    return;
+  }
+  Serial.println("SPIFFS initialized successfully!");
+
   // Включение питания модема
   pinMode(MODEM_POWER_PIN, OUTPUT);
   digitalWrite(MODEM_POWER_PIN, HIGH);
@@ -214,8 +227,29 @@ void loop() {
   SerialMon.print(F("Body length is: "));
   SerialMon.println(body.length());
 
-  // Shutdown
+  // Save firmware to SPIFFS
+  if (saveFirmwareToSPIFFS(body)) {
+    Serial.println("Firmware saved to SPIFFS.");
 
+    // Verify checksum
+    if (verifyFirmwareChecksum(firmware_file_path, expected_crc32)) {
+      Serial.println("Firmware checksum is valid.");
+
+      // Write firmware to OTA partition and update
+      if (writeFirmwareToOTA(firmware_file_path)) {
+        Serial.println("Firmware updated successfully. Restarting...");
+        ESP.restart();
+      } else {
+        Serial.println("Firmware update failed.");
+      }
+    } else {
+      Serial.println("Error: Checksum mismatch.");
+    }
+  } else {
+    Serial.println("Error saving firmware to SPIFFS.");
+  }
+
+  // Shutdown
   http.stop();
   SerialMon.println(F("Server disconnected"));
 
@@ -229,169 +263,95 @@ void loop() {
 #endif
 
   // Do nothing forevermore
-  while (true) { delay(1000); }
-  /*SerialMon.print(F("Connecting to "));
-  SerialMon.print(server);
-  if (!client.connect(server, port)) {
-    SerialMon.println(" fail");
-    delay(10000);
-    return;
+  while (true) { delay(1000); }  
+}
+
+// Saves the firmware string to a SPIFFS file
+bool saveFirmwareToSPIFFS(const String& data) {  
+  File firmwareFile = SPIFFS.open(firmware_file_path, FILE_WRITE);
+  if (!firmwareFile) {
+    Serial.println("Failed to open file for writing.");
+    return false;
   }
-  SerialMon.println(" success");
 
-  // Make a HTTP GET request:
-  client.print(String("GET ") + resource + " HTTPS/1.0\r\n");
-  client.print(String("Host: ") + server + "\r\n");
-  client.print("Connection: close\r\n\r\n");
+  size_t bytesWritten = firmwareFile.print(data);
+  firmwareFile.close();
 
-  // Let's see what the entire elapsed time is, from after we send the request.
-  uint32_t timeElapsed = millis();
+  if (bytesWritten == data.length()) {
+    Serial.printf("Successfully wrote %d bytes.\n", bytesWritten);
+    return true;
+  } else {
+    Serial.printf("Write error: wrote %d bytes out of %d.\n", bytesWritten, data.length());
+    return false;
+  }
+}
 
-  SerialMon.println(F("Waiting for response header"));
+// Verifies the checksum of the firmware file
+bool verifyFirmwareChecksum(const char* filePath, uint32_t expectedCRC) {
+  File firmwareFile = SPIFFS.open(filePath, FILE_READ);
+  if (!firmwareFile) {
+    Serial.println("Failed to open file for checksum verification.");
+    return false;
+  }
 
-  // While we are still looking for the end of the header (i.e. empty line
-  // FOLLOWED by a newline), continue to read data into the buffer, parsing each
-  // line (data FOLLOWED by a newline). If it takes too long to get data from
-  // the client, we need to exit.
+  CRC32 crc;
 
-  const uint32_t clientReadTimeout   = 5000;
-  uint32_t       clientReadStartTime = millis();
-  String         headerBuffer;
-  bool           finishedHeader = false;
-  uint32_t       contentLength  = 0;
+  uint8_t buffer[128];
+  while (firmwareFile.available()) {
+    size_t bytesRead = firmwareFile.read(buffer, sizeof(buffer));
+    crc.update(buffer, bytesRead);
+  }
 
-  while (!finishedHeader) {
-    int nlPos;
+  firmwareFile.close();
+  uint32_t actualCRC = crc.finalize();
+  Serial.printf("File checksum: 0x%08X\n", actualCRC);
 
-    if (client.available()) {
-      clientReadStartTime = millis();
-      while (client.available()) {
-        char c = client.read();
-        headerBuffer += c;
+  return actualCRC == expectedCRC;
+}
 
-        // Uncomment the lines below to see the data coming into the buffer
-        if (c < 16)
-          SerialMon.print('0');
-        //SerialMon.print(c, HEX);
-        //SerialMon.print(' ');
-        if (isprint(c))
-          SerialMon.print(c);
-        else
-          SerialMon.print('*');
-        //SerialMon.print(' ');
+// Writes firmware from SPIFFS to the OTA partition
+bool writeFirmwareToOTA(const char* filePath) {
+  File firmwareFile = SPIFFS.open(filePath, FILE_READ);
+  if (!firmwareFile) {
+    Serial.println("Failed to open file for OTA update.");
+    return false;
+  }
 
-        // Let's exit and process if we find a new line
-        if (headerBuffer.indexOf(F("\r\n")) >= 0) break;
-      }
+  size_t firmwareSize = firmwareFile.size();
+  Serial.printf("Firmware size: %d bytes\n", firmwareSize);
+
+  if (!Update.begin(firmwareSize)) {
+    Serial.println("Error: Not enough space for the update.");
+    firmwareFile.close();
+    return false;
+  }
+
+  uint8_t buffer[128];
+  size_t totalBytes = 0;
+
+  while (firmwareFile.available()) {
+    size_t bytesRead = firmwareFile.read(buffer, sizeof(buffer));
+    if (Update.write(buffer, bytesRead) != bytesRead) {
+      Serial.println("Error writing data to OTA.");
+      Update.abort();
+      firmwareFile.close();
+      return false;
+    }
+    totalBytes += bytesRead;
+  }
+
+  firmwareFile.close();
+
+  if (Update.end()) {
+    if (Update.isFinished()) {
+      Serial.println("OTA update completed successfully!");
+      return true;
     } else {
-      if (millis() - clientReadStartTime > clientReadTimeout) {
-        // Time-out waiting for data from client
-        SerialMon.println(F(">>> Client Timeout !"));
-        break;
-      }
+      Serial.println("Error: Update not finished.");
     }
-
-    // See if we have a new line.
-    nlPos = headerBuffer.indexOf(F("\r\n"));
-
-    if (nlPos > 0) {
-      headerBuffer.toLowerCase();
-      // Check if line contains content-length
-      if (headerBuffer.startsWith(F("content-length:"))) {
-        contentLength =
-            headerBuffer.substring(headerBuffer.indexOf(':') + 1).toInt();
-        SerialMon.print(F("Got Content Length: "));  // uncomment for
-        SerialMon.println(contentLength);            // confirmation
-      }
-
-      headerBuffer.remove(0, nlPos + 2);  // remove the line
-    } else if (nlPos == 0) {
-      // if the new line is empty (i.e. "\r\n" is at the beginning of the line),
-      // we are done with the header.
-      finishedHeader = true;
-    }
+  } else {
+    Serial.printf("Error completing update: %s\n", Update.errorString());
   }
 
-  // The two cases which are not managed properly are as follows:
-  // 1. The client doesn't provide data quickly enough to keep up with this
-  // loop.
-  // 2. If the client data is segmented in the middle of the 'Content-Length: '
-  // header,
-  //    then that header may be missed/damaged.
-  //
-
-  uint32_t readLength = 0;
-  CRC32    crc;
- /* uint32_t bytesReceived = 0;
-  while (client.available()) {
-        uint8_t c = client.read();
-        bytesReceived++;
-        if (c < 16)
-          SerialMon.print('0');
-          SerialMon.print(c, HEX);
-          SerialMon.print(' ');
-        if (isprint(c))
-          SerialMon.print(c);
-        else
-          SerialMon.print('*');
-        SerialMon.print(' ');
-  }
-  SerialMon.printf("Bytes received: %d\n", bytesReceived);
-
-  if (finishedHeader && contentLength == knownFileSize) {
-    SerialMon.println(F("Reading response data"));
-    clientReadStartTime = millis();
-
-    printPercent(readLength, contentLength);
-    while (readLength < contentLength && client.connected() &&
-           millis() - clientReadStartTime < clientReadTimeout) {
-      while (client.available()) {
-        uint8_t c = client.read();
-        // SerialMon.print(reinterpret_cast<char>(c));  // Uncomment this to show
-        // data
-        crc.update(c);
-        readLength++;
-        if (readLength % (contentLength / 13) == 0) {
-          printPercent(readLength, contentLength);
-        }
-        clientReadStartTime = millis();
-      }
-    }
-    printPercent(readLength, contentLength);
-  }
-
-  timeElapsed = millis() - timeElapsed;
-  SerialMon.println();
-
-  // Shutdown
-
-  client.stop();
-  SerialMon.println(F("Server disconnected"));
-
-#if TINY_GSM_USE_WIFI
-  modem.networkDisconnect();
-  SerialMon.println(F("WiFi disconnected"));
-#endif
-#if TINY_GSM_USE_GPRS
-  modem.gprsDisconnect();
-  SerialMon.println(F("GPRS disconnected"));
-#endif
-
-  float duration = float(timeElapsed) / 1000;
-
-  SerialMon.println();
-  SerialMon.print("Content-Length: ");
-  SerialMon.println(contentLength);
-  SerialMon.print("Actually read:  ");
-  SerialMon.println(readLength);
-  SerialMon.print("Calc. CRC32:    0x");
-  SerialMon.println(crc.finalize(), HEX);
-  SerialMon.print("Known CRC32:    0x");
-  SerialMon.println(knownCRC32, HEX);
-  SerialMon.print("Duration:       ");
-  SerialMon.print(duration);
-  SerialMon.println("s");
-
-  // Do nothing forevermore
-  while (true) { delay(1000); }*/
+  return false;
 }
