@@ -102,7 +102,7 @@ bool writeFirmwareToOTA(const char* filePath) {
 
     return false;
 }
-#error "Split firmware not tested"
+//#error "Split firmware not tested"
 // Perform full firmware update (save, verify, write to OTA)
 void performFirmwareUpdate(const String& firmwareData, const char* firmware_file_path, uint32_t expected_crc32) {
     Serial.println("Starting firmware update process...");
