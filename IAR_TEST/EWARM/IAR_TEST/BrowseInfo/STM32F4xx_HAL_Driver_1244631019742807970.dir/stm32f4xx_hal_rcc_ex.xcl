@@ -21,6 +21,8 @@ C:\Projects\Meteo-ESP32\IAR_TEST\EWARM/../Drivers/CMSIS/Device/ST/STM32F4xx/Incl
 -I
 C:\Projects\Meteo-ESP32\IAR_TEST\EWARM/../Drivers/CMSIS/Include
 -I
+C:\Projects\Meteo-ESP32\IAR_TEST\EWARM/../Core/libTest
+-I
 C:\Program Files\IAR Systems\Embedded Workbench 9.2\arm\inc\c\aarch32
 -I
 C:\Program Files\IAR Systems\Embedded Workbench 9.2\arm\inc
@@ -36,6 +38,8 @@ C:\Projects\Meteo-ESP32\IAR_TEST\Drivers\STM32F4xx_HAL_Driver\Inc\Legacy
 C:\Projects\Meteo-ESP32\IAR_TEST\Drivers\CMSIS\Device\ST\STM32F4xx\Include
 -I
 C:\Projects\Meteo-ESP32\IAR_TEST\Drivers\CMSIS\Include
+-I
+C:\Projects\Meteo-ESP32\IAR_TEST\Core\libTest
 -D__CHAR_BITS__=8
 -D__CHAR_MAX__=0xff
 -D__CHAR_MIN__=0

@@ -1481,6 +1481,15 @@
                     <name>$PROJ_DIR$\..\Core\Src\stm32f4xx_it.c</name>
                 </file>
             </group>
+            <group>
+                <name>libTest</name>
+                <file>
+                    <name>$PROJ_DIR$\..\Core\libTest\libb.c</name>
+                </file>
+            </group>
+            <group>
+                <name>vsGroup</name>
+            </group>
         </group>
     </group>
     <group>

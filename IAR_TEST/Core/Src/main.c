@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "libb.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -96,7 +96,7 @@ int main(void)
   {
     HAL_GPIO_TogglePin(TEST_PIN_GPIO_Port, TEST_PIN_Pin); //WritePin(TEST_PIN_GPIO_Port, TEST_PIN_Pin, GPIO_PIN_RESET);
     HAL_Delay(1000);
-    counter++;
+    counter = count(counter);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

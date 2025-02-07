@@ -17,5 +17,8 @@
         "path": "${workspaceFolder}\\IAR_TEST\\EWARM\\IAR_TEST.ewp"
       }
     }
+  },
+  "workbench": {
+    "path": "C:\\Program Files\\IAR Systems\\Embedded Workbench 9.2"
   }
 }
