@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BuildDb>
+    <Tool>
+        <Name>linker</Name>
+        <Parent>
+            <Path>C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\IAR_TEST\Exe\IAR_TEST.out</Path>
+            <Output>
+                <Path>C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\IAR_TEST\List\IAR_TEST.map</Path>
+            </Output>
+        </Parent>
+    </Tool>
+</BuildDb>

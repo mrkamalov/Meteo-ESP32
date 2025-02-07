@@ -1,37 +1,37 @@
 C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\IAR_TEST\BrowseInfo\Core_13247989168731456611.dir\main.pbi: \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr_ex.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash_ramfunc.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash_ex.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_cortex.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_dma_ex.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_dma.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_exti.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_gpio_ex.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_gpio.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_rcc_ex.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\ycheck.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\ysizet.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\stddef.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\Legacy\stm32_hal_legacy.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Device\ST\STM32F4xx\Include\system_stm32f4xx.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\mpu_armv7.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\aarch32\iccarm_builtin.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\cmsis_iccarm.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\cmsis_compiler.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\cmsis_version.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\DLib_Product.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\DLib_Config_Full.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\DLib_Defaults.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\yvals.h \
-  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\stdint.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\core_cm4.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Device\ST\STM32F4xx\Include\stm32f407xx.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Device\ST\STM32F4xx\Include\stm32f4xx.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_def.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_rcc.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Core\Inc\stm32f4xx_hal_conf.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\Core\Src\main.c \
   C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Core\Inc\main.h \
-  C:\Projects\Meteo-ESP32\IAR_TEST\Core\Src\main.c
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Core\Inc\stm32f4xx_hal_conf.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_rcc.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_def.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Device\ST\STM32F4xx\Include\stm32f4xx.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Device\ST\STM32F4xx\Include\stm32f407xx.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\core_cm4.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\stdint.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\ycheck.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\yvals.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\DLib_Defaults.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\DLib_Config_Full.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\DLib_Product.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\cmsis_version.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\cmsis_compiler.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\cmsis_iccarm.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\aarch32\iccarm_builtin.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Include\mpu_armv7.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\CMSIS\Device\ST\STM32F4xx\Include\system_stm32f4xx.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\Legacy\stm32_hal_legacy.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\stddef.h \
+  C:\Program\ Files\IAR\ Systems\Embedded\ Workbench\ 9.2\arm\inc\c\ysizet.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_rcc_ex.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_gpio.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_gpio_ex.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_exti.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_dma.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_dma_ex.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_cortex.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash_ex.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash_ramfunc.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr.h \
+  C:\Projects\Meteo-ESP32\IAR_TEST\EWARM\..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr_ex.h
