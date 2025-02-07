@@ -1,0 +1,21 @@
+{
+  "configs": {
+    "${workspaceFolder}\\IAR_TEST\\EWARM\\IAR_TEST.ewp": "IAR_TEST"
+  },
+  "project": {
+    "path": "${workspaceFolder}\\IAR_TEST\\EWARM\\IAR_TEST.ewp"
+  },
+  "workspace": {
+    "path": "${workspaceFolder}\\IAR_TEST\\EWARM\\Project.eww"
+  },
+  "workspaces": {
+    "${workspaceFolder}\\IAR_TEST\\EWARM\\Project.eww": {
+      "configs": {
+        "${workspaceFolder}\\IAR_TEST\\EWARM\\IAR_TEST.ewp": "IAR_TEST"
+      },
+      "selected": {
+        "path": "${workspaceFolder}\\IAR_TEST\\EWARM\\IAR_TEST.ewp"
+      }
+    }
+  }
+}
