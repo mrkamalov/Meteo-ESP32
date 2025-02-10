@@ -145,7 +145,42 @@ void disconnectGPRS(void){
 #endif
 }
 
-String loadFirmware(void){
+uint16_t getPartsNumber(){
+  SerialMon.print(F("Receive parts number from server... "));
+  int err = http.get(partsAddress);
+  if (err != 0) {
+    SerialMon.println(F("failed to connect"));
+    delay(10000);
+    return 0;
+  }
+  int status = http.responseStatusCode();
+  SerialMon.print(F("Response status code: "));
+  SerialMon.println(status);
+  if (!status) {
+    delay(10000);
+    return 0;
+  }
+  SerialMon.println(F("Response Headers:"));
+  while (http.headerAvailable()) {
+    String headerName  = http.readHeaderName();
+    String headerValue = http.readHeaderValue();
+    SerialMon.println("    " + headerName + " : " + headerValue);
+  }
+
+  int length = http.contentLength();
+  if (length >= 0) {
+    SerialMon.print(F("Content length is: "));
+    SerialMon.println(length);
+  }  
+
+  String body = http.responseBody();
+  SerialMon.println(F("Response:"));
+  SerialMon.println(body);
+  return body.toInt();
+}
+
+
+String loadFirmware(){
   SerialMon.print(F("Performing HTTPS GET request... "));
   http.connectionKeepAlive();  // Currently, this is needed for HTTPS
   int err = http.get(resource);

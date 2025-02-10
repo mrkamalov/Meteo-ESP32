@@ -33,6 +33,7 @@ void setup() {
 void loop() {
   
   connectToGPRS();
+  uint16_t partsNum = getPartsNumber();
   String body = loadFirmware();
   // Perform firmware update
   performFirmwareUpdate(body, firmware_file_path, expected_crc32);

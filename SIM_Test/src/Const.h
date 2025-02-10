@@ -19,5 +19,5 @@ const char wifiPass[] = "YourWiFiPass";
 const char server[] = "mrkamalov.github.io";//https://
 const int  port     = 443;//80;
 const char resource[]    = "/Meteo-ESP32/test_50k.hex";
-
+const char partsAddress[] = "/Meteo-ESP32/firmware/parts.txt";
 #endif // CONST_H
