@@ -147,6 +147,7 @@ void disconnectGPRS(void){
 
 void getConfigData(uint32_t &partsCount, uint32_t &crc, uint32_t &totalSize){
   SerialMon.print(F("Receive parts number from server... "));
+  http.connectionKeepAlive();  // Currently, this is needed for HTTPS
   int err = http.get(configAddress);
   if (err != 0) {
     SerialMon.println(F("failed to connect"));
@@ -160,22 +161,7 @@ void getConfigData(uint32_t &partsCount, uint32_t &crc, uint32_t &totalSize){
     delay(10000);
     return;
   }
-  SerialMon.println(F("Response Headers:"));
-  while (http.headerAvailable()) {
-    String headerName  = http.readHeaderName();
-    String headerValue = http.readHeaderValue();
-    SerialMon.println("    " + headerName + " : " + headerValue);
-  }
-
-  int length = http.contentLength();
-  if (length >= 0) {
-    SerialMon.print(F("Content length is: "));
-    SerialMon.println(length);
-  }  
-
   String body = http.responseBody();
-  SerialMon.println(F("Response:"));
-  SerialMon.println(body);
   sscanf(body.c_str(), "%d %X %u", &partsCount, &crc, &totalSize);
   Serial.printf("Total parts: %d, CRC: 0x%08X, Total size: %u bytes\n", 
                 partsCount, crc, totalSize);
