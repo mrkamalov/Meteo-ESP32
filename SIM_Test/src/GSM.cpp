@@ -145,20 +145,20 @@ void disconnectGPRS(void){
 #endif
 }
 
-uint16_t getPartsNumber(){
+void getConfigData(uint32_t &partsCount, uint32_t &crc, uint32_t &totalSize){
   SerialMon.print(F("Receive parts number from server... "));
-  int err = http.get(partsAddress);
+  int err = http.get(configAddress);
   if (err != 0) {
     SerialMon.println(F("failed to connect"));
     delay(10000);
-    return 0;
+    return;
   }
   int status = http.responseStatusCode();
   SerialMon.print(F("Response status code: "));
   SerialMon.println(status);
   if (!status) {
     delay(10000);
-    return 0;
+    return;
   }
   SerialMon.println(F("Response Headers:"));
   while (http.headerAvailable()) {
@@ -176,7 +176,9 @@ uint16_t getPartsNumber(){
   String body = http.responseBody();
   SerialMon.println(F("Response:"));
   SerialMon.println(body);
-  return body.toInt();
+  sscanf(body.c_str(), "%d %X %u", &partsCount, &crc, &totalSize);
+  Serial.printf("Total parts: %d, CRC: 0x%08X, Total size: %u bytes\n", 
+                partsCount, crc, totalSize);
 }
 
 
