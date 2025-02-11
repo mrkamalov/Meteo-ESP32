@@ -16,9 +16,6 @@
 #include "GSM.h"
 #include <HardwareSerial.h>
 
-const char* firmware_file_path = "/firmware.bin"; // Path for saving the firmware
-const uint32_t expected_crc32 = 0x6f50d767; // Example CRC32 checksum
-
 void setup() {
   // Set console baud rate
   Serial.begin(115200);
@@ -30,18 +27,9 @@ void setup() {
   initGSMModem();
 }
 
-void loop() {
-  uint32_t partsCount = 0;
-  uint32_t crc = 0;
-  uint32_t totalSize = 0;
-  
-  connectToGPRS();
-  getConfigData(partsCount, crc, totalSize);
-  Serial.printf("Total parts: %d, CRC: 0x%08X, Total size: %u bytes\n", 
-                partsCount, crc, totalSize);
-  String body = loadFirmware();
-  // Perform firmware update
-  performFirmwareUpdate(body, firmware_file_path, expected_crc32);
+void loop() {  
+  connectToGPRS();  
+  performFirmwareUpdate();  
   disconnectGPRS();
 
   // Do nothing forevermore

@@ -162,51 +162,61 @@ void getConfigData(uint32_t &partsCount, uint32_t &crc, uint32_t &totalSize){
     return;
   }
   String body = http.responseBody();
-  sscanf(body.c_str(), "%d %X %u", &partsCount, &crc, &totalSize);
-  Serial.printf("Total parts: %d, CRC: 0x%08X, Total size: %u bytes\n", 
-                partsCount, crc, totalSize);
+  sscanf(body.c_str(), "%d %X %u", &partsCount, &crc, &totalSize);  
 }
 
 
-String loadFirmware(){
-  SerialMon.print(F("Performing HTTPS GET request... "));
-  http.connectionKeepAlive();  // Currently, this is needed for HTTPS
-  int err = http.get(resource);
-  if (err != 0) {
-    SerialMon.println(F("failed to connect"));
-    delay(10000);
-    return "";
-  }
+String loadFirmwarePart(int partNumber){
+  char partNumberString[4];
+  snprintf(partNumberString, sizeof(partNumberString), "%03d", partNumber);
+  char url[128];
+  snprintf(url, sizeof(url), "%s%s.bin", resource, partNumberString);
 
-  int status = http.responseStatusCode();
-  SerialMon.print(F("Response status code: "));
-  SerialMon.println(status);
-  if (!status) {
-    delay(10000);
-    return "";
-  }
+  int attemptNumber = 0;
+  String body = "";
+  do{
+    SerialMon.printf("Load part number %03d attempt %d ", partNumber, attemptNumber);
+    http.connectionKeepAlive();  // Currently, this is needed for HTTPS
+    int err = http.get(url);
+    if (err != 0) {
+      SerialMon.println(F("failed to connect"));
+      delay(10000);
+      return "";
+    }
 
-  SerialMon.println(F("Response Headers:"));
-  while (http.headerAvailable()) {
-    String headerName  = http.readHeaderName();
-    String headerValue = http.readHeaderValue();
-    SerialMon.println("    " + headerName + " : " + headerValue);
-  }
+    int status = http.responseStatusCode();
+    SerialMon.print(F("Response status code: "));
+    SerialMon.println(status);
+    if (!status) {
+      delay(10000);
+      return "";
+    }
 
-  int length = http.contentLength();
-  if (length >= 0) {
-    SerialMon.print(F("Content length is: "));
-    SerialMon.println(length);
-  }
-  if (http.isResponseChunked()) {
-    SerialMon.println(F("The response is chunked"));
-  }
+    // SerialMon.println(F("Response Headers:"));
+    // while (http.headerAvailable()) {
+    //   String headerName  = http.readHeaderName();
+    //   String headerValue = http.readHeaderValue();
+    //   SerialMon.println("    " + headerName + " : " + headerValue);
+    // }
 
-  String body = http.responseBody();
-  SerialMon.println(F("Response:"));
-  SerialMon.println(body);
+    int length = http.contentLength();
+    if (length >= 0) {
+      SerialMon.print(F("Content length is: "));
+      SerialMon.println(length);
+    }
+    if (http.isResponseChunked()) {
+      SerialMon.println(F("The response is chunked"));
+    }
 
-  SerialMon.print(F("Body length is: "));
-  SerialMon.println(body.length());
+    body = http.responseBody();
+    // SerialMon.println(F("Response:"));
+    // SerialMon.println(body);
+
+    // SerialMon.print(F("Body length is: "));
+    // SerialMon.println(body.length());
+    if (body != NULL) break;
+    attemptNumber++;    
+  }while (attemptNumber < 3);
+  
   return body;
 }
