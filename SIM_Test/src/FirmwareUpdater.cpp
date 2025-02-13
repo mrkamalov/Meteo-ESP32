@@ -130,25 +130,26 @@ void performFirmwareUpdate(void){
     getConfigData(partsCount, crc, totalSize);
     Serial.printf("Total parts: %d, CRC: 0x%08X, Total size: %u bytes\n", 
                 partsCount, crc, totalSize);
-    for (uint32_t partNum = 0; partNum < partsCount; partNum++) {
-        String firmwareData = loadFirmwarePart(partNum);
-        if(firmwareData != ""){
-            if(firmwareData.length() == 0) {
-                Serial.println("Failed to load firmware part");
-                return;
-            }
-            // Save firmware to SPIFFS
-            // if (saveFirmwareToSPIFFS(firmwareData, partNum)) Serial.println("Firmware saved to SPIFFS.");
-            // else {
-            //     Serial.println("Error saving firmware to SPIFFS.");
-            //     return;
-            // }
-        }
-        else{
-            Serial.println("Error loading firmware part.");
-            return;
-        }
+    File firmwareFile = SPIFFS.open(firmware_file_path, FILE_WRITE);
+    if (!firmwareFile) {  
+        Serial.println("Error opening firmware file.");
+        return;
     }
+    for (uint32_t partNum = 0; partNum < partsCount; partNum++) {
+        if(loadFirmwarePart(partNum, firmwareFile)) Serial.println("Firmware part loaded to SPIFFS.");
+        else {
+            Serial.println("Error loading firmware part.");
+            firmwareFile.close();
+            return;
+        }               
+        // Save firmware to SPIFFS
+        // if (saveFirmwareToSPIFFS(firmwareData, partNum)) Serial.println("Firmware saved to SPIFFS.");
+        // else {
+        //     Serial.println("Error saving firmware to SPIFFS.");
+        //     return;
+        // }        
+    }
+    firmwareFile.close();
     // Verify checksum
     if (verifyFirmwareChecksum(crc, totalSize)) {
         Serial.println("Firmware checksum is valid.");

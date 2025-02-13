@@ -1,6 +1,7 @@
 #include "GSM.h"
 #include <HardwareSerial.h>
 #include "Const.h"
+#include "ExtendedHttpClient.h"
 
 // Определите пины для подключения модема
 #define MODEM_RX 18
@@ -62,7 +63,7 @@ TinyGsm        modem(SerialAT);
 #endif
 
 TinyGsmClientSecure client(modem);
-HttpClient          http(client, server, port);
+ExtendedHttpClient  http(client, server, port);//HttpClient          http(client, server, port);
 void initGSMModem()
 {
   // Включение питания модема
@@ -166,14 +167,13 @@ void getConfigData(uint32_t &partsCount, uint32_t &crc, uint32_t &totalSize){
 }
 
 
-String loadFirmwarePart(int partNumber){
+bool loadFirmwarePart(int partNumber, Stream &firmwareFile){
   char partNumberString[4];
   snprintf(partNumberString, sizeof(partNumberString), "%03d", partNumber);
   char url[128];
   snprintf(url, sizeof(url), "%s%s.bin", resource, partNumberString);
 
-  int attemptNumber = 0;
-  String body = "";
+  int attemptNumber = 0;  
   do{
     SerialMon.printf("Load part number %03d attempt %d ", partNumber, attemptNumber);
     http.connectionKeepAlive();  // Currently, this is needed for HTTPS
@@ -181,7 +181,7 @@ String loadFirmwarePart(int partNumber){
     if (err != 0) {
       SerialMon.println(F("failed to connect"));
       delay(10000);
-      return "";
+      return false;
     }
 
     int status = http.responseStatusCode();
@@ -189,7 +189,7 @@ String loadFirmwarePart(int partNumber){
     SerialMon.println(status);
     if (!status) {
       delay(10000);
-      return "";
+      return false;
     }
 
     // SerialMon.println(F("Response Headers:"));
@@ -207,16 +207,15 @@ String loadFirmwarePart(int partNumber){
     if (http.isResponseChunked()) {
       SerialMon.println(F("The response is chunked"));
     }
-
-    body = http.responseBody();
+    if(http.responseBodyStream(firmwareFile)) return true;      
+    //strcpy(buffer, http.responseBody().c_str());
     // SerialMon.println(F("Response:"));
     // SerialMon.println(body);
 
     // SerialMon.print(F("Body length is: "));
     // SerialMon.println(body.length());
-    if (body != NULL) break;
     attemptNumber++;    
   }while (attemptNumber < 3);
-  
-  return body;
+    
+  return false;
 }
