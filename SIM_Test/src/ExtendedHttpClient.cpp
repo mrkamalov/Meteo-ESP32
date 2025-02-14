@@ -37,8 +37,9 @@ bool ExtendedHttpClient::responseBodyStream(Stream &output) {
 
     if (bodyLength > 0 && bodyLength!=writedBytes){    //(unsigned int)bodyLength != response.length()) {
         // failure, we did not read in response content length bytes
+        Serial.printf("Writed bytes: %d\n", writedBytes);
         return false;//String((const char*)NULL);
     }
-
+    Serial.printf("Writed bytes: %d\n", writedBytes);
     return true;//response;
 }

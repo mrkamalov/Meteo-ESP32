@@ -146,7 +146,7 @@ void disconnectGPRS(void){
 #endif
 }
 
-void getConfigData(uint32_t &partsCount, uint32_t &crc, uint32_t &totalSize){
+void getConfigData(uint32_t &partsCount, uint32_t &crc, uint32_t &totalSize, uint32_t &partsSize){
   SerialMon.print(F("Receive parts number from server... "));
   http.connectionKeepAlive();  // Currently, this is needed for HTTPS
   int err = http.get(configAddress);
@@ -163,7 +163,7 @@ void getConfigData(uint32_t &partsCount, uint32_t &crc, uint32_t &totalSize){
     return;
   }
   String body = http.responseBody();
-  sscanf(body.c_str(), "%d %X %u", &partsCount, &crc, &totalSize);  
+  sscanf(body.c_str(), "%d %X %u %u", &partsCount, &crc, &totalSize, &partsSize);  
 }
 
 

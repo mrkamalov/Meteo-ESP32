@@ -7,9 +7,7 @@
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 
-//SPIFFS file path
-const char* firmware_file_path = "/firmware.bin"; // Path for saving the firmware file
-
+String firmware_catalog_path = "/firmware";
 // Initialize SPIFFS
 bool initSPIFFS() {
     if (!SPIFFS.begin(true)) {
@@ -21,7 +19,7 @@ bool initSPIFFS() {
 }
 
 // Save the firmware string to SPIFFS
-bool saveFirmwareToSPIFFS(const String& data, uint32_t partNum) {
+/*bool saveFirmwareToSPIFFS(const String& data, uint32_t partNum) {
     File firmwareFile;
     if (partNum == 0) {
         firmwareFile = SPIFFS.open(firmware_file_path, FILE_WRITE);
@@ -44,10 +42,10 @@ bool saveFirmwareToSPIFFS(const String& data, uint32_t partNum) {
         Serial.printf("Write error: written %d bytes out of %d.\n", bytesWritten, data.length());
         return false;
     }
-}
+}*/
 
 // Verify the checksum of the firmware file
-bool verifyFirmwareChecksum(uint32_t expected_crc32, uint32_t totalSize) {
+bool verifyFirmwareChecksum(uint32_t expected_crc32, uint32_t totalSize, const String& firmware_file_path) {
     File firmwareFile = SPIFFS.open(firmware_file_path, FILE_READ);
     if (!firmwareFile) {
         Serial.println("Error opening file for checksum verification.");
@@ -76,7 +74,7 @@ bool verifyFirmwareChecksum(uint32_t expected_crc32, uint32_t totalSize) {
 }
 
 // Write the firmware from SPIFFS to the OTA partition
-bool writeFirmwareToOTA() {
+bool writeFirmwareToOTA(const String& firmware_file_path) {
     File firmwareFile = SPIFFS.open(firmware_file_path, FILE_READ);
     if (!firmwareFile) {
         Serial.println("Error opening file for OTA update.");
@@ -122,40 +120,49 @@ bool writeFirmwareToOTA() {
     return false;
 }
 
+// Check if the firmware file size matches the expected part size
+bool checkFirmwarePartSize(File& firmwareFile, uint32_t expectedSize) {
+    size_t actualSize = firmwareFile.size();
+    if (actualSize != expectedSize) {
+        Serial.printf("Error: firmware part size mismatch. Expected: %u, Actual: %u\n", expectedSize, actualSize);
+        return false;
+    }
+    return true;
+}
+
 void performFirmwareUpdate(void){
     uint32_t partsCount = 0;
     uint32_t crc = 0;
     uint32_t totalSize = 0;
+    uint32_t partsSize = 0;
 
-    getConfigData(partsCount, crc, totalSize);
-    Serial.printf("Total parts: %d, CRC: 0x%08X, Total size: %u bytes\n", 
-                partsCount, crc, totalSize);
-    File firmwareFile = SPIFFS.open(firmware_file_path, FILE_WRITE);
-    if (!firmwareFile) {  
-        Serial.println("Error opening firmware file.");
-        return;
-    }
-    for (uint32_t partNum = 0; partNum < partsCount; partNum++) {
+    getConfigData(partsCount, crc, totalSize, partsSize);
+    Serial.printf("Total parts: %d, CRC: 0x%08X, Total size: %u bytes Parts size: %u\n", 
+                partsCount, crc, totalSize, partsSize);    
+    for (int partNum = 0; partNum < partsCount; partNum++) {
+        char partNumberString[4];
+        snprintf(partNumberString, sizeof(partNumberString), "%03d", partNum);
+        String firmwarePath = firmware_catalog_path+String(partNumberString)+".bin";
+        File firmwareFile = SPIFFS.open(firmwarePath, FILE_WRITE);
+        if (!firmwareFile) {  
+            Serial.println("Error opening firmware file.");
+            return;
+        }
         if(loadFirmwarePart(partNum, firmwareFile)) Serial.println("Firmware part loaded to SPIFFS.");
         else {
             Serial.println("Error loading firmware part.");
             firmwareFile.close();
             return;
-        }               
-        // Save firmware to SPIFFS
-        // if (saveFirmwareToSPIFFS(firmwareData, partNum)) Serial.println("Firmware saved to SPIFFS.");
-        // else {
-        //     Serial.println("Error saving firmware to SPIFFS.");
-        //     return;
-        // }        
-    }
-    firmwareFile.close();
+        }
+        if(!checkFirmwarePartSize(firmwareFile, partsSize)) partNum--;         
+        firmwareFile.close();      
+    }    
     // Verify checksum
-    if (verifyFirmwareChecksum(crc, totalSize)) {
+    if (verifyFirmwareChecksum(crc, totalSize, firmware_catalog_path+"/firmware.bin")) {
         Serial.println("Firmware checksum is valid.");
 
         // Write firmware to OTA and update
-        if (writeFirmwareToOTA()) {
+        if (writeFirmwareToOTA(firmware_catalog_path+"/firmware.bin")) {
             Serial.println("Firmware updated successfully. Restarting...");
             ESP.restart();
         } else {
