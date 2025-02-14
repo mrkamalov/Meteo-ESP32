@@ -1,6 +1,6 @@
 import os
 
-def split_file(file_path, chunk_size=20 * 1024):
+def split_file(file_path, chunk_size=50 * 1024):
     """Split a binary file into smaller parts."""
     if not os.path.exists(file_path):
         print(f"File not found: {file_path}")
