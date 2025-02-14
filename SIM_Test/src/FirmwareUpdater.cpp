@@ -154,8 +154,10 @@ void performFirmwareUpdate(void){
             firmwareFile.close();
             return;
         }
-        if(!checkFirmwarePartSize(firmwareFile, partsSize)) partNum--;         
-        firmwareFile.close();      
+        #error "Add reload and check parts already loaded"
+        if(!checkFirmwarePartSize(firmwareFile, partsSize)) {partNum--; delay(1000); continue;}
+        firmwareFile.close();
+        verifyFirmwareChecksum(crc, 20480, firmwarePath);   
     }    
     // Verify checksum
     if (verifyFirmwareChecksum(crc, totalSize, firmware_catalog_path+"/firmware.bin")) {
