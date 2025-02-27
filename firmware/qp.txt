@@ -1,0 +1,4 @@
+login MeteoESP
+pass Rsu!wCzvzE52FS7
+ip 66.220.9.50 (ftp.drivehq.com)
+port 21 (FTP/SSL)
