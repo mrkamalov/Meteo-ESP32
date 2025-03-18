@@ -2,3 +2,15 @@ login MeteoESP
 pass Rsu!wCzvzE52FS7
 ip 66.220.9.50 (ftp.drivehq.com)
 port 21 (FTP/SSL)
+
+sftpcloud.io
+Host ap-southeast-1.sftpcloud.io
+Username 2244dd5bba3741a0a3bf222a33e5798a
+Password I1XaPfmML2rjzLSK273dYiGvoFONfCR5
+FTP ok FTPS err
+
+DriveHQ2
+login mrkamalov001
+pass PSc2q@UVSn5rayc
+ip 66.220.9.50 (ftp.drivehq.com)
+port 21 (FTP/SSL)
