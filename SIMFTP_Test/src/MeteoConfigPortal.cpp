@@ -12,12 +12,11 @@ MeteoConfigPortal::MeteoConfigPortal() : server(80) {}
 // ==== Функция запуска ====
 void MeteoConfigPortal::begin() {
     // Подключение Wi-Fi через WiFiManager
-    if (!wifiManager.autoConnect("ConfigAP")) {
-        Serial.println("Не удалось подключиться, перезагрузка...");
-        ESP.restart();
-    }
+    //WiFi.mode(WIFI_STA);
+    wifiManager.resetSettings();
+    wifiManager.setConfigPortalBlocking(false);    
+    wifiManager.autoConnect("ConfigAP");
 
-    Serial.println("Подключено к Wi-Fi!");
     EEPROM.begin(EEPROM_SIZE);
     deviceId = EEPROM.read(DEVICE_ID_ADDR) | (EEPROM.read(DEVICE_ID_ADDR + 1) << 8);    
     Serial.println("Device ID: " + String(deviceId));
@@ -25,7 +24,39 @@ void MeteoConfigPortal::begin() {
     if (MDNS.begin("meteo"+String(deviceId))) {
         Serial.println("MDNS responder started: http://meteo"+String(deviceId)+".local");
     }
-    setupWebServer();
+    //setupWebServer();
+}
+
+// ==== В цикле ====
+void MeteoConfigPortal::loop() {
+    doWiFiManager();
+    /*if (configPortalRequested) {
+        configPortalRequested = false;
+        wifiManager.startConfigPortal("ConfigAP");
+    }*/
+}
+
+// ==== Запуск WiFiManager ====
+void MeteoConfigPortal::doWiFiManager() {
+    if (configPortalRequested) {
+        wifiManager.process(); // do processing
+
+        /*// check for timeout
+        if((millis()-startTime) > (timeout*1000)){
+            Serial.println("portaltimeout");
+            portalRunning = false;
+            wifiManager.stopConfigPortal();            
+        }*/
+    }
+    if(!webPortalActive){
+        if(WiFi.status() == WL_CONNECTED){         
+            webPortalActive = true;
+            configPortalRequested = false;
+            //wifiManager.stopConfigPortal();            
+            Serial.println("Web portal started");
+            setupWebServer();
+        }
+    } 
 }
 
 // ==== Сохранение устройств в EEPROM ====
@@ -140,6 +171,12 @@ void MeteoConfigPortal::handleRemoveDevice(AsyncWebServerRequest *request) {
     request->send(200, "text/plain", "Устройство удалено");
 }
 
+// ==== Запуск конфигурационного портала ====
+void MeteoConfigPortal::handleStartConfigPortal(AsyncWebServerRequest *request) {
+    configPortalRequested = true;
+    request->send(200, "text/plain", "Starting config portal...");
+}
+
 // ==== Встроенный HTML-фронтенд ====
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -175,6 +212,10 @@ const char index_html[] PROGMEM = R"rawliteral(
             await fetch(`/setDeviceId?deviceId=${deviceId}`);
         }
 
+
+        async function startWiFiConfig() {
+            await fetch("/startConfig");
+        }
         window.onload = loadDevices;
     </script>
 </head>
@@ -189,6 +230,8 @@ const char index_html[] PROGMEM = R"rawliteral(
     <label for="deviceId">Device ID:</label>
     <input id="deviceId" placeholder="Device ID">
     <button onclick="setDeviceId()">Change Device ID</button>
+    <br><br>
+    <button onclick="startWiFiConfig()">Open WiFi Config</button>
 </body>
 </html>
 )rawliteral";
@@ -217,6 +260,10 @@ void MeteoConfigPortal::setupWebServer() {
 
     server.on("/getDeviceId", HTTP_GET, [this](AsyncWebServerRequest *request) {
         request->send(200, "text/plain", getDeviceId());
+    });
+
+    server.on("/startConfig", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleStartConfigPortal(request);
     });
 
     server.begin();
