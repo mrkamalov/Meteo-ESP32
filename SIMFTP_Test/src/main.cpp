@@ -1,4 +1,4 @@
-/*#include <HardwareSerial.h>
+#include <HardwareSerial.h>
 #include "sim800Updater.h"
 #include "MeteoConfigPortal.h"
 
@@ -20,42 +20,12 @@ void loop() {
     while (true) {
         //delay(1000);
         if(simUpdater.checkForUpdates()) simUpdater.updateFirmwareViaGPRS();// Объединить в один метод
-        meteoPortal.loop();
+        meteoPortal.loop();    
     }  
 }
-*/
+
 
 /*
-  -----------------------
-  ElegantOTA - Async Demo Example
-  -----------------------
-
-  NOTE: Make sure you have enabled Async Mode in ElegantOTA before compiling this example!
-  Guide: https://docs.elegantota.pro/async-mode/
-
-  Skill Level: Beginner
-
-  This example provides with a bare minimal app with ElegantOTA functionality which works
-  with AsyncWebServer.
-
-  Github: https://github.com/ayushsharma82/ElegantOTA
-  WiKi: https://docs.elegantota.pro
-
-  Works with:
-  - ESP8266
-  - ESP32
-  - RP2040 (with WiFi) (Example: Raspberry Pi Pico W)
-  - RP2350 (with WiFi) (Example: Raspberry Pi Pico 2W)
-
-  Important note for RP2040/RP2350 users:
-  - RP2040/RP2350 requires LittleFS partition for the OTA updates to work. Without LittleFS partition, OTA updates will fail.
-    Make sure to select Tools > Flash Size > "2MB (Sketch 1MB, FS 1MB)" option.
-  - If using bare RP2040/RP2350, it requires a WiFi chip like Pico W/Pico 2W for ElegantOTA to work.
-
-  -------------------------------
-
-  Upgrade to ElegantOTA Pro: https://elegantota.pro
-*/
 #include <WiFi.h>
 #include <AsyncTCP.h>
 
@@ -128,3 +98,4 @@ void loop(void) {
   ElegantOTA.loop();
 }
 
+*/

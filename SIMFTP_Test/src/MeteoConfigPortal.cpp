@@ -2,61 +2,85 @@
 #include <EEPROM.h>
 #include <ESPmDNS.h>
 
-#define EEPROM_SIZE 512
-#define DEVICE_LIST_ADDR 50 // Сдвиг для конфигурационных данных
-#define DEVICE_ID_ADDR 46  // Адрес хранения ID устройства (2 байта)
-
 // ==== Конструктор ====
 MeteoConfigPortal::MeteoConfigPortal() : server(80) {}
 
+#define CLEAR_EEPROM false  // Поставь true для очистки EEPROM при старте
+
 // ==== Функция запуска ====
 void MeteoConfigPortal::begin() {
-    // Подключение Wi-Fi через WiFiManager
-    //WiFi.mode(WIFI_STA);
-    wifiManager.resetSettings();
-    wifiManager.setConfigPortalBlocking(false);    
-    wifiManager.autoConnect("ConfigAP");
-
     EEPROM.begin(EEPROM_SIZE);
+    if (CLEAR_EEPROM) {
+        for (int i = 10; i < EEPROM_SIZE; i++) {
+            EEPROM.write(i, 0);
+        }
+        EEPROM.commit();
+    }
     deviceId = EEPROM.read(DEVICE_ID_ADDR) | (EEPROM.read(DEVICE_ID_ADDR + 1) << 8);    
     Serial.println("Device ID: " + String(deviceId));
+    loadWiFiSettings();
     loadDevicesFromEEPROM();
+    if (!connectToWiFi()) {
+        WiFi.softAP("MeteoConfig"+String(deviceId));
+        Serial.println("Access Point started");
+    }
+    else {
+        Serial.println("Connected to WiFi: " + wifiSSID);
+        Serial.println("IP Address: " + WiFi.localIP().toString());
+    }
     if (MDNS.begin("meteo"+String(deviceId))) {
         Serial.println("MDNS responder started: http://meteo"+String(deviceId)+".local");
     }
-    //setupWebServer();
+    setupWebServer();
+    ElegantOTA.begin(&server);
+    server.begin();
 }
 
-// ==== В цикле ====
 void MeteoConfigPortal::loop() {
-    doWiFiManager();
-    /*if (configPortalRequested) {
-        configPortalRequested = false;
-        wifiManager.startConfigPortal("ConfigAP");
-    }*/
+    // add time management code here
+    static unsigned long lastTime = 0;
+    unsigned long currentTime = millis();
+
+    if (currentTime - lastTime >= 10000) { // Execute every 10 seconds
+        lastTime = currentTime;
+
+        // Example: Print current time in seconds since boot
+        Serial.println("Uptime: " + String(currentTime / 1000) + " seconds");
+        Serial.print("WiFi mode: "); Serial.println(WiFi.getMode());
+        Serial.print("SoftAP IP: "); Serial.println(WiFi.softAPIP());
+    }    
 }
 
-// ==== Запуск WiFiManager ====
-void MeteoConfigPortal::doWiFiManager() {
-    if (configPortalRequested) {
-        wifiManager.process(); // do processing
+bool MeteoConfigPortal::connectToWiFi() {
+    if (wifiSSID.isEmpty()) return false;
+    WiFi.begin(wifiSSID.c_str(), wifiPass.c_str());
 
-        /*// check for timeout
-        if((millis()-startTime) > (timeout*1000)){
-            Serial.println("portaltimeout");
-            portalRunning = false;
-            wifiManager.stopConfigPortal();            
-        }*/
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+        delay(500);
+        Serial.print(".");
     }
-    if(!webPortalActive){
-        if(WiFi.status() == WL_CONNECTED){         
-            webPortalActive = true;
-            configPortalRequested = false;
-            //wifiManager.stopConfigPortal();            
-            Serial.println("Web portal started");
-            setupWebServer();
-        }
-    } 
+    return WiFi.status() == WL_CONNECTED;
+}
+
+void MeteoConfigPortal::loadWiFiSettings() {
+    char ssid[20], pass[20];
+    for (int i = 0; i < 20; ++i) {
+        ssid[i] = EEPROM.read(WIFI_SSID_ADDR + i);
+        pass[i] = EEPROM.read(WIFI_PASS_ADDR + i);
+    }
+    wifiSSID = String(ssid);
+    wifiPass = String(pass);
+}
+
+void MeteoConfigPortal::saveWiFiSettings(const String& ssid, const String& pass) {
+    for (int i = 0; i < 20; ++i) {
+        EEPROM.write(WIFI_SSID_ADDR + i, i < ssid.length() ? ssid[i] : 0);
+        EEPROM.write(WIFI_PASS_ADDR + i, i < pass.length() ? pass[i] : 0);
+    }
+    EEPROM.commit();
+    wifiSSID = ssid;
+    wifiPass = pass;
 }
 
 // ==== Сохранение устройств в EEPROM ====
@@ -171,10 +195,18 @@ void MeteoConfigPortal::handleRemoveDevice(AsyncWebServerRequest *request) {
     request->send(200, "text/plain", "Устройство удалено");
 }
 
-// ==== Запуск конфигурационного портала ====
-void MeteoConfigPortal::handleStartConfigPortal(AsyncWebServerRequest *request) {
-    configPortalRequested = true;
-    request->send(200, "text/plain", "Starting config portal...");
+// ==== Обработчик настроек WiFi ====
+void MeteoConfigPortal::handleWiFiSettings(AsyncWebServerRequest *request) {
+    if (request->hasParam("ssid") && request->hasParam("pass")) {
+        String ssid = request->getParam("ssid")->value();
+        String pass = request->getParam("pass")->value();
+        saveWiFiSettings(ssid, pass);
+        request->send(200, "text/plain", "WiFi settings saved. Rebooting...");
+        delay(1000);
+        ESP.restart();
+    } else {
+        request->send(400, "text/plain", "Missing parameters");
+    }
 }
 
 // ==== Встроенный HTML-фронтенд ====
@@ -192,6 +224,11 @@ const char index_html[] PROGMEM = R"rawliteral(
             let deviceIdResponse = await fetch("/getDeviceId");
             let deviceId = await deviceIdResponse.text();
             document.getElementById("deviceId").value = deviceId;
+
+            let wifiResponse = await fetch("/getWiFi");
+            let wifi = await wifiResponse.json();
+            document.getElementById("ssid").value = wifi.ssid;
+            document.getElementById("pass").value = wifi.pass;
         }
 
         async function addDevice() {
@@ -212,9 +249,22 @@ const char index_html[] PROGMEM = R"rawliteral(
             await fetch(`/setDeviceId?deviceId=${deviceId}`);
         }
 
+        async function saveWiFi() {
+            let ssid = document.getElementById("ssid").value;
+            let pass = document.getElementById("pass").value;
+            await fetch(`/setWiFi?ssid=${ssid}&pass=${pass}`);
+        }
+
+        function goToUpdate() {
+            window.location.href = "/update";
+        }
 
         async function startWiFiConfig() {
             await fetch("/startConfig");
+        }
+
+        async function reboot() {
+            await fetch("/reboot");
         }
         window.onload = loadDevices;
     </script>
@@ -231,7 +281,16 @@ const char index_html[] PROGMEM = R"rawliteral(
     <input id="deviceId" placeholder="Device ID">
     <button onclick="setDeviceId()">Change Device ID</button>
     <br><br>
-    <button onclick="startWiFiConfig()">Open WiFi Config</button>
+    <h3>WiFi Settings</h3>
+    <label for="ssid">WiFi SSID:</label>
+    <input id="ssid" placeholder="WiFi SSID">
+    <label for="pass">WiFi Password:</label>
+    <input id="pass" placeholder="WiFi Password">
+    <button onclick="saveWiFi()">Save WiFi</button>    
+    <br><br>
+    <button onclick="goToUpdate()">Update Firmware</button>
+    <br><br>
+    <button onclick="reboot()">Reboot Device</button>
 </body>
 </html>
 )rawliteral";
@@ -262,9 +321,18 @@ void MeteoConfigPortal::setupWebServer() {
         request->send(200, "text/plain", getDeviceId());
     });
 
-    server.on("/startConfig", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        handleStartConfigPortal(request);
+    server.on("/getWiFi", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        String json = "{\"ssid\": \"" + wifiSSID + "\", \"pass\": \"" + wifiPass + "\"}";
+        request->send(200, "application/json", json);
     });
 
-    server.begin();
+    server.on("/setWiFi", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleWiFiSettings(request);        
+    });    
+
+    server.on("/reboot", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", "Rebooting...");
+        delay(1000);
+        ESP.restart();
+    });
 }
