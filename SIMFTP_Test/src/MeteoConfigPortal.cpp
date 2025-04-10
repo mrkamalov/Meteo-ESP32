@@ -36,8 +36,7 @@ void MeteoConfigPortal::begin() {
     server.begin();
 }
 
-void MeteoConfigPortal::loop() {
-    // add time management code here
+void MeteoConfigPortal::loop() {    
     static unsigned long lastTime = 0;
     unsigned long currentTime = millis();
 
@@ -48,6 +47,11 @@ void MeteoConfigPortal::loop() {
         Serial.println("Uptime: " + String(currentTime / 1000) + " seconds");
         Serial.print("WiFi mode: "); Serial.println(WiFi.getMode());
         Serial.print("SoftAP IP: "); Serial.println(WiFi.softAPIP());
+        if (WiFi.getMode() != WIFI_MODE_APSTA && !WiFi.softAPgetStationNum()) {
+            WiFi.mode(WIFI_MODE_APSTA);
+            WiFi.softAP("MeteoConfig");
+        }
+
     }    
 }
 
