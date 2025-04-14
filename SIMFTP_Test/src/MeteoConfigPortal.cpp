@@ -20,13 +20,13 @@ void MeteoConfigPortal::begin() {
     Serial.println("Device ID: " + String(deviceId));
     loadWiFiSettings();
     loadDevicesFromEEPROM();
-    if (!connectToWiFi()) {
-        WiFi.softAP("MeteoConfig"+String(deviceId));
-        Serial.println("Access Point started");
-    }
-    else {
+    if (connectToWiFi()) {
         Serial.println("Connected to WiFi: " + wifiSSID);
         Serial.println("IP Address: " + WiFi.localIP().toString());
+    }
+    else{
+        Serial.println("Failed to connect to WiFi. Starting AP...");
+        startAccessPoint();
     }
     if (MDNS.begin("meteo"+String(deviceId))) {
         Serial.println("MDNS responder started: http://meteo"+String(deviceId)+".local");
@@ -36,24 +36,61 @@ void MeteoConfigPortal::begin() {
     server.begin();
 }
 
-void MeteoConfigPortal::loop() {    
-    static unsigned long lastTime = 0;
-    unsigned long currentTime = millis();
-
-    if (currentTime - lastTime >= 10000) { // Execute every 10 seconds
-        lastTime = currentTime;
-
-        // Example: Print current time in seconds since boot
-        Serial.println("Uptime: " + String(currentTime / 1000) + " seconds");
-        Serial.print("WiFi mode: "); Serial.println(WiFi.getMode());
-        Serial.print("SoftAP IP: "); Serial.println(WiFi.softAPIP());
-        if (WiFi.getMode() != WIFI_MODE_APSTA && !WiFi.softAPgetStationNum()) {
-            WiFi.mode(WIFI_MODE_APSTA);
-            WiFi.softAP("MeteoConfig");
+void MeteoConfigPortal::loop() {
+    if (WiFi.status() == WL_CONNECTED) {
+        if (apActive) {
+            WiFi.softAPdisconnect(true);
+            apActive = false;
+            Serial.println("Disconnected AP due to WiFi STA connection");
+            Serial.println("Connected to WiFi: " + wifiSSID);
+            Serial.println("IP Address: " + WiFi.localIP().toString());            
         }
+    }
+    else{
+        unsigned long currentMillis = millis();        
 
+        // Цикл точки доступа — выключить/включить, если никого нет
+        if (apActive) {
+            if(currentMillis - lastApCheck > apCheckInterval){
+                lastApCheck = currentMillis;
+                Serial.println("Checking AP status...");
+                if (WiFi.softAPgetStationNum() == 0) {
+                    Serial.println("Cycling AP: No clients connected");
+                    WiFi.softAPdisconnect(true);
+                    apActive = false;
+                    apRestartPending = true;
+                    apRestartTime = currentMillis;
+                    lastWifiCheck = currentMillis; // Сброс таймера WiFi проверки
+                }
+                else{
+                    Serial.println("AP active: " + String(WiFi.softAPgetStationNum()) + " clients connected");
+                }
+            }            
+        }
+        else{
+            // Проверка подключения к WiFi
+            if (currentMillis - lastWifiCheck > wifiCheckInterval) {
+                lastWifiCheck = currentMillis;
+                Serial.println("Restarting WiFi AP...");
+                startAccessPoint();
+            }
+            // Отложенный запуск точки доступа
+            if (apRestartPending && currentMillis - apRestartTime >= apRestartDelay) {
+                startAccessPoint();
+                apRestartPending = false;
+            }
+        }        
     }    
 }
+
+void MeteoConfigPortal::startAccessPoint() {
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP("MeteoConfig"+String(deviceId));
+    apActive = true;
+    lastApCheck = millis();
+    Serial.println("Started Access Point");
+}
+
 
 bool MeteoConfigPortal::connectToWiFi() {
     if (wifiSSID.isEmpty()) return false;

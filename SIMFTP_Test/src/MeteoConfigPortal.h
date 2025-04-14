@@ -29,6 +29,14 @@ private:
     int deviceId; 
     String wifiSSID;
     String wifiPass;
+    unsigned long lastWifiCheck = 0;
+    const unsigned long wifiCheckInterval = 90000;  // 90 секунд
+    unsigned long lastApCheck = 0;
+    unsigned long apCheckInterval = 60000;
+    bool apActive = false;
+    bool apRestartPending = false;
+    unsigned long apRestartTime = 0;
+    const unsigned long apRestartDelay = 100; // 100 ms delay before AP restart
 
     void setupWebServer();
     String getMeteoDevicesList();
@@ -40,6 +48,7 @@ private:
     void loadWiFiSettings();
     void saveWiFiSettings(const String& ssid, const String& pass);
     bool connectToWiFi();
+    void startAccessPoint();
 
     void handleSetDeviceId(AsyncWebServerRequest *request);
     void handleGetDevices(AsyncWebServerRequest *request);
