@@ -20,6 +20,8 @@ void MeteoConfigPortal::begin() {
     Serial.println("Device ID: " + String(deviceId));
     loadWiFiSettings();
     loadDevicesFromEEPROM();
+    loadGPRSSettings();
+    loadTransferPriority();
     if (connectToWiFi()) {
         Serial.println("Connected to WiFi: " + wifiSSID);
         Serial.println("IP Address: " + WiFi.localIP().toString());
@@ -181,72 +183,35 @@ void MeteoConfigPortal::saveDeviceId(int id) {
     deviceId = id;
 }
 
-// ==== Обработчик установки ID ====
-void MeteoConfigPortal::handleSetDeviceId(AsyncWebServerRequest *request) {
-    if (!request->hasParam("deviceId")) {
-        request->send(400, "text/plain", "Ошибка: нужен параметр deviceId");
-        return;
-    }
-
-    int id = request->getParam("deviceId")->value().toInt();
-    if(id < 0 || id > 0xFFFF) {
-        request->send(400, "text/plain", "Ошибка: некорректный ID устройства");
-        return;
-    }
-    saveDeviceId(id);
-    request->send(200, "text/plain", "ID устройства сохранен");
+void MeteoConfigPortal::saveGPRSSettings(String apn, String user, String pass) {
+    Serial.println("Saving GPRS settings...");
+    Serial.println("APN: " + apn);
+    Serial.println("User: " + user);
+    Serial.println("Pass: " + pass);
+    for (int i = 0; i < 20; i++) EEPROM.write(GPRS_APN_ADDR + i, i < apn.length() ? apn[i] : 0);
+    for (int i = 0; i < 20; i++) EEPROM.write(GPRS_USER_ADDR + i, i < user.length() ? user[i] : 0);
+    for (int i = 0; i < 20; i++) EEPROM.write(GPRS_PASS_ADDR + i, i < pass.length() ? pass[i] : 0);
+    EEPROM.commit();
+    gprsAPN = apn;
+    gprsUser = user;
+    gprsPass = pass;    
 }
 
-// ==== Функция получения текущего ID ====
-String MeteoConfigPortal::getDeviceId() {
-    return String(deviceId);
+void MeteoConfigPortal::loadGPRSSettings() {
+    char apn[21], user[21], pass[21];
+    for (int i = 0; i < 20; i++) apn[i] = EEPROM.read(GPRS_APN_ADDR + i);
+    for (int i = 0; i < 20; i++) user[i] = EEPROM.read(GPRS_USER_ADDR + i);
+    for (int i = 0; i < 20; i++) pass[i] = EEPROM.read(GPRS_PASS_ADDR + i);
+    apn[20] = user[20] = pass[20] = '\0';
+    gprsAPN = String(apn);
+    gprsUser = String(user);
+    gprsPass = String(pass);
 }
 
-// ==== Обработчик запроса на получение списка устройств ====
-void MeteoConfigPortal::handleGetDevices(AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", getMeteoDevicesList());
-}
-
-// ==== Обработчик добавления устройства ====
-void MeteoConfigPortal::handleAddDevice(AsyncWebServerRequest *request) {
-    if (!request->hasParam("id") || !request->hasParam("name")) {
-        request->send(400, "text/plain", "Ошибка: нужны параметры id и name");
-        return;
-    }
-
-    int id = request->getParam("id")->value().toInt();
-    String name = request->getParam("name")->value();
-
-    meteoDevices.push_back({id, name});
-    saveDevicesToEEPROM();
-    request->send(200, "text/plain", "Устройство добавлено");
-}
-
-// ==== Обработчик удаления устройства ====
-void MeteoConfigPortal::handleRemoveDevice(AsyncWebServerRequest *request) {
-    if (!request->hasParam("id")) {
-        request->send(400, "text/plain", "Ошибка: нужен параметр id");
-        return;
-    }
-
-    int id = request->getParam("id")->value().toInt();
-    meteoDevices.erase(std::remove_if(meteoDevices.begin(), meteoDevices.end(),
-        [id](MeteoDevice &dev) { return dev.id == id; }), meteoDevices.end());
-    saveDevicesToEEPROM();
-    request->send(200, "text/plain", "Устройство удалено");
-}
-
-// ==== Обработчик настроек WiFi ====
-void MeteoConfigPortal::handleWiFiSettings(AsyncWebServerRequest *request) {
-    if (request->hasParam("ssid") && request->hasParam("pass")) {
-        String ssid = request->getParam("ssid")->value();
-        String pass = request->getParam("pass")->value();
-        saveWiFiSettings(ssid, pass);
-        request->send(200, "text/plain", "WiFi settings saved. Rebooting...");
-        delay(1000);
-        ESP.restart();
-    } else {
-        request->send(400, "text/plain", "Missing parameters");
+void MeteoConfigPortal::loadTransferPriority() {
+    transferPriority = static_cast<DataPriority>(EEPROM.read(TRANSFER_PRIORITY_ADDR));
+    if (transferPriority < PRIORITY_WIFI_ONLY || transferPriority >= PRIORITIES_NUMBER) {
+        transferPriority = PRIORITY_WIFI_ONLY; // Значение по умолчанию
     }
 }
 
@@ -270,6 +235,16 @@ const char index_html[] PROGMEM = R"rawliteral(
             let wifi = await wifiResponse.json();
             document.getElementById("ssid").value = wifi.ssid;
             document.getElementById("pass").value = wifi.pass;
+
+            let gprsResponse = await fetch("/getGPRS");
+            let gprs = await gprsResponse.json();
+            document.getElementById("apn").value = gprs.apn;
+            document.getElementById("gprsUser").value = gprs.user;
+            document.getElementById("gprsPass").value = gprs.pass;
+
+            let priorityResponse = await fetch("/getPriority");
+            let priority = await priorityResponse.text();
+            document.getElementById("priority").value = priority;
         }
 
         async function addDevice() {
@@ -294,6 +269,18 @@ const char index_html[] PROGMEM = R"rawliteral(
             let ssid = document.getElementById("ssid").value;
             let pass = document.getElementById("pass").value;
             await fetch(`/setWiFi?ssid=${ssid}&pass=${pass}`);
+        }
+
+        async function saveGPRS() {
+            let apn = document.getElementById("apn").value;
+            let user = document.getElementById("gprsUser").value;
+            let pass = document.getElementById("gprsPass").value;
+            await fetch(`/setGPRS?apn=${apn}&user=${user}&pass=${pass}`);
+        }
+
+        async function savePriority() {
+            let priority = document.getElementById("priority").value;
+            await fetch(`/setPriority?priority=${priority}`);
         }
 
         function goToUpdate() {
@@ -327,7 +314,24 @@ const char index_html[] PROGMEM = R"rawliteral(
     <input id="ssid" placeholder="WiFi SSID">
     <label for="pass">WiFi Password:</label>
     <input id="pass" placeholder="WiFi Password">
-    <button onclick="saveWiFi()">Save WiFi</button>    
+    <button onclick="saveWiFi()">Save WiFi</button>
+    <br><br>
+    <h3>GPRS Settings</h3>
+    <label for="apn">GPRS APN:</label>
+    <input id="apn" placeholder="APN">
+    <label for="gprsUser">GPRS User:</label>
+    <input id="gprsUser" placeholder="GPRS User">
+    <label for="gprsPass">GPRS Password:</label>
+    <input id="gprsPass" placeholder="GPRS Password">
+    <button onclick="saveGPRS()">Save GPRS</button>
+    <br><br>
+    <label for="priority">Data Transfer Priority:</label>
+    <select id="priority">
+        <option value="0">Only WiFi</option>
+        <option value="1">Only GPRS</option>
+        <option value="2">WiFi first, then GPRS</option>
+    </select>
+    <button onclick="savePriority()">Save Priority</button>
     <br><br>
     <button onclick="goToUpdate()">Update Firmware</button>
     <br><br>
@@ -336,44 +340,173 @@ const char index_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-// ==== Настройка веб-сервера ====
-void MeteoConfigPortal::setupWebServer() {
-    server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/html", index_html);
-    });
-
+// ==== Обработчик запроса на получение списка устройств ====
+void MeteoConfigPortal::handleGetDevices() {
     server.on("/devices", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        handleGetDevices(request);
-    });
+        request->send(200, "text/plain", getMeteoDevicesList());
+    });    
+}
 
+// ==== Обработчик добавления устройства ====
+void MeteoConfigPortal::handleAddDevice() {
     server.on("/add", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        handleAddDevice(request);
-    });
+        if (!request->hasParam("id") || !request->hasParam("name")) {
+            request->send(400, "text/plain", "Ошибка: нужны параметры id и name");
+            return;
+        }
 
+        int id = request->getParam("id")->value().toInt();
+        String name = request->getParam("name")->value();
+
+        meteoDevices.push_back({id, name});
+        saveDevicesToEEPROM();
+        request->send(200, "text/plain", "Устройство добавлено");
+    });    
+}
+
+// ==== Обработчик удаления устройства ====
+void MeteoConfigPortal::handleRemoveDevice() {
     server.on("/remove", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        handleRemoveDevice(request);
-    });
+        if (!request->hasParam("id")) {
+            request->send(400, "text/plain", "Ошибка: нужен параметр id");
+            return;
+        }
 
+        int id = request->getParam("id")->value().toInt();
+        meteoDevices.erase(std::remove_if(meteoDevices.begin(), meteoDevices.end(),
+            [id](MeteoDevice &dev) { return dev.id == id; }), meteoDevices.end());
+        saveDevicesToEEPROM();
+        request->send(200, "text/plain", "Устройство удалено");
+    });
+}
+
+// ==== Обработчик установки ID ====
+void MeteoConfigPortal::handleSetDeviceId() {
     server.on("/setDeviceId", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        handleSetDeviceId(request);
-    });
+        if (!request->hasParam("deviceId")) {
+            request->send(400, "text/plain", "Ошибка: нужен параметр deviceId");
+            return;
+        }
 
+        int id = request->getParam("deviceId")->value().toInt();
+        if(id < 0 || id > 0xFFFF) {
+            request->send(400, "text/plain", "Ошибка: некорректный ID устройства");
+            return;
+        }
+        saveDeviceId(id);
+        request->send(200, "text/plain", "ID устройства сохранен");
+    });
+}
+
+// ==== Функция получения текущего ID ====
+String MeteoConfigPortal::getDeviceId() {
+    return String(deviceId);
+}
+
+void MeteoConfigPortal::handleGetDeviceId(){
     server.on("/getDeviceId", HTTP_GET, [this](AsyncWebServerRequest *request) {
         request->send(200, "text/plain", getDeviceId());
     });
+}
 
+void MeteoConfigPortal::handleGetWiFi() {
     server.on("/getWiFi", HTTP_GET, [this](AsyncWebServerRequest *request) {
         String json = "{\"ssid\": \"" + wifiSSID + "\", \"pass\": \"" + wifiPass + "\"}";
         request->send(200, "application/json", json);
-    });
-
-    server.on("/setWiFi", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        handleWiFiSettings(request);        
     });    
+}
 
-    server.on("/reboot", HTTP_GET, [](AsyncWebServerRequest *request){
+void MeteoConfigPortal::handleSetWiFi() {
+    server.on("/setWiFi", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("ssid") && request->hasParam("pass")) {
+            String ssid = request->getParam("ssid")->value();
+            String pass = request->getParam("pass")->value();
+            saveWiFiSettings(ssid, pass);
+            request->send(200, "text/plain", "WiFi settings saved. Rebooting...");
+            delay(1000);
+            ESP.restart();
+        } else {
+            request->send(400, "text/plain", "Missing parameters");
+        }
+    });
+}
+
+void MeteoConfigPortal::handleGetGPRS() {
+    server.on("/getGPRS", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        String json = "{\"apn\": \"" + gprsAPN + "\", \"user\": \"" + gprsUser + "\", \"pass\": \"" + gprsPass + "\"}";
+        request->send(200, "application/json", json);
+    });
+}
+
+void MeteoConfigPortal::handleSetGPRS() {
+    server.on("/setGPRS", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("apn") && request->hasParam("user") && request->hasParam("pass")) {
+            String apn = request->getParam("apn")->value();
+            String user = request->getParam("user")->value();
+            String pass = request->getParam("pass")->value();
+            saveGPRSSettings(apn, user, pass);
+            request->send(200, "text/plain", "GPRS settings saved. Rebooting...");
+            delay(1000);
+            ESP.restart();
+        } else {
+            request->send(400, "text/plain", "Missing parameters");
+        }
+    });
+}
+
+void MeteoConfigPortal::handleReboot() {
+    server.on("/reboot", HTTP_GET, [this](AsyncWebServerRequest *request) {
         request->send(200, "text/plain", "Rebooting...");
         delay(1000);
         ESP.restart();
     });
+}
+
+void MeteoConfigPortal::handleRoot() {
+    server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", index_html);
+    });
+}
+
+void MeteoConfigPortal::handleGetTransferPriority() {
+    server.on("/getPriority", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        request->send(200, "text/plain", String((int)transferPriority));
+    });
+}
+
+void MeteoConfigPortal::handleSetTransferPriority() {
+    server.on("/setPriority", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("priority")) {
+            int val = request->getParam("priority")->value().toInt();
+            if (val >= PRIORITY_WIFI_ONLY && val < PRIORITIES_NUMBER) {
+                transferPriority = static_cast<DataPriority>(val);
+                EEPROM.write(TRANSFER_PRIORITY_ADDR, (uint8_t)transferPriority);
+                EEPROM.commit();
+                request->send(200, "text/plain", "Priority saved");
+                return;
+            }
+        }
+        request->send(400, "text/plain", "Invalid priority");
+    });
+}
+
+// ==== Настройка веб-сервера ====
+void MeteoConfigPortal::setupWebServer() {
+    handleRoot();
+    handleGetDevices();
+    handleAddDevice();
+    handleRemoveDevice();
+    handleSetDeviceId();
+    handleGetDeviceId();
+
+    handleGetWiFi();
+    handleSetWiFi();
+
+    handleGetGPRS();
+    handleSetGPRS();
+
+    handleReboot();
+
+    handleGetTransferPriority();
+    handleSetTransferPriority();    
 }

@@ -11,10 +11,6 @@ const char apn[]      = "internet.altel.kz";
 const char gprsUser[] = "";
 const char gprsPass[] = "";
 
-// Your WiFi connection credentials, if applicable
-const char wifiSSID[] = "YourSSID";
-const char wifiPass[] = "YourWiFiPass";
-
 // Server details
 const char server[] = "mrkamalov.github.io";//https://
 const int  port     = 443;//80;
