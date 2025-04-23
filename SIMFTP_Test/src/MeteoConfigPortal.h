@@ -24,6 +24,7 @@ public:
     MeteoConfigPortal();
     void begin(); // Запуск портала
     void loop();
+    DataPriority getTransferPriority();
 private:
     // EEPROM config
     static const int EEPROM_SIZE = 512;    
@@ -66,9 +67,8 @@ private:
     bool connectToWiFi();
     void startAccessPoint();
     void saveGPRSSettings(String apn, String user, String pass);
-    void loadGPRSSettings();
-    void saveTransferPriority(int priority);
-    void loadTransferPriority();
+    void loadGPRSSettings();    
+    void loadTransferPriority();    
 
     void handleRoot();
     void handleSetDeviceId();

@@ -1,18 +1,11 @@
 #include <HardwareSerial.h>
 #include "sim800Updater.h"
-#include "MeteoConfigPortal.h"
-#include "Sim868Client.h"
+#include "TransmissionManager.h"
 
 #define MODEM_RX 18
 #define MODEM_TX 17
-#define MODEM_POWER_PIN 8
-#define LED_PIN 39
-#define SerialMon Serial
-#define SerialAT Serial1
-
 static Sim800Updater simUpdater;
-static MeteoConfigPortal meteoPortal;
-static Sim868Client simClient(SerialAT, SerialMon, MODEM_POWER_PIN, LED_PIN);
+static TransmissionManager transmissionManager;
 
 void setup() {
     // Set console baud rate
@@ -20,7 +13,8 @@ void setup() {
     Serial1.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
     //meteoPortal.begin();
     //simUpdater.init();
-    simClient.begin();
+    //simClient.begin();    
+    transmissionManager.begin();
 }
 
 void loop() {    
@@ -28,7 +22,8 @@ void loop() {
         //delay(1000);
         //if(simUpdater.checkForUpdates()) simUpdater.updateFirmwareViaGPRS();// Объединить в один метод
         //meteoPortal.loop();
-        simClient.loop();
+        //simClient.loop();  
+        transmissionManager.loop();      
     }  
 }
 

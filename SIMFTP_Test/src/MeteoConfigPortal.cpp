@@ -215,6 +215,10 @@ void MeteoConfigPortal::loadTransferPriority() {
     }
 }
 
+DataPriority MeteoConfigPortal::getTransferPriority() {
+    return transferPriority;
+}
+
 // ==== Встроенный HTML-фронтенд ====
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -483,6 +487,8 @@ void MeteoConfigPortal::handleSetTransferPriority() {
                 EEPROM.write(TRANSFER_PRIORITY_ADDR, (uint8_t)transferPriority);
                 EEPROM.commit();
                 request->send(200, "text/plain", "Priority saved");
+                delay(1000);
+                ESP.restart();
                 return;
             }
         }
