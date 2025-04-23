@@ -1,96 +1,104 @@
-/* WebOTA.ino
- *  
- * by Roland Pelayo 
- * 
- * Update ESP32 firmware via external web server
- */
- 
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <Update.h>
+#include <HardwareSerial.h>
+#include "sim800Updater.h"
+#include "TransmissionManager.h"
 
-// location of firmware file on external web server
-// change to your actual .bin location
-#define HOST "https://mrkamalov.github.io/Meteo-ESP32/testFW.bin"
-void updateFirmware(uint8_t *data, size_t len);
-HTTPClient client;
-// Your WiFi credentials
-const char* ssid = "SG_RND";
-const char* password = "korkemwifi";
-// Global variables
-int totalLength;       //total size of firmware
-int currentLength = 0; //current size of written firmware
+#define MODEM_RX 18
+#define MODEM_TX 17
+static Sim800Updater simUpdater;
+static TransmissionManager transmissionManager;
 
 void setup() {
+    // Set console baud rate
+    Serial.begin(115200);    
+    Serial1.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
+    //meteoPortal.begin();
+    //simUpdater.init();
+    //simClient.begin();    
+    transmissionManager.begin();
+}
+
+void loop() {    
+    while (true) {
+        //delay(1000);
+        //if(simUpdater.checkForUpdates()) simUpdater.updateFirmwareViaGPRS();// Объединить в один метод
+        //meteoPortal.loop();
+        //simClient.loop();  
+        transmissionManager.loop();      
+    }  
+}
+
+
+/*
+#include <WiFi.h>
+#include <AsyncTCP.h>
+
+#include <ESPAsyncWebServer.h>
+#include <ElegantOTA.h>
+
+const char* ssid = "SG_GUEST";
+const char* password = "";
+
+AsyncWebServer server(80);
+
+unsigned long ota_progress_millis = 0;
+
+void onOTAStart() {
+  // Log when OTA has started
+  Serial.println("OTA update started!");
+  // <Add your own code here>
+}
+
+void onOTAProgress(size_t current, size_t final) {
+  // Log every 1 second
+  if (millis() - ota_progress_millis > 1000) {
+    ota_progress_millis = millis();
+    Serial.printf("OTA Progress Current: %u bytes, Final: %u bytes\n", current, final);
+  }
+}
+
+void onOTAEnd(bool success) {
+  // Log when OTA has finished
+  if (success) {
+    Serial.println("OTA update finished successfully!");
+  } else {
+    Serial.println("There was an error during OTA update!");
+  }
+  // <Add your own code here>
+}
+
+void setup(void) {
   Serial.begin(115200);
-  // Start WiFi connection
-  WiFi.mode(WIFI_MODE_STA);        
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      Serial.print(".");
-  }
-
   Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-  // Connect to external web server
-  client.begin(HOST);
-  // Get file, just to check if each reachable
-  int resp = client.GET();
-  Serial.print("Response: ");
-  Serial.println(resp);
-  // If file is reachable, start downloading
-  if(resp == 200){
-      // get length of document (is -1 when Server sends no Content-Length header)
-      totalLength = client.getSize();
-      // transfer to local variable
-      int len = totalLength;
-      // this is required to start firmware update process
-      Update.begin(UPDATE_SIZE_UNKNOWN);
-      Serial.printf("FW Size: %u\n",totalLength);
-      // create buffer for read
-      uint8_t buff[128] = { 0 };
-      // get tcp stream
-      WiFiClient * stream = client.getStreamPtr();
-      // read all data from server
-      Serial.println("Updating firmware...");
-      while(client.connected() && (len > 0 || len == -1)) {
-           // get available data size
-           size_t size = stream->available();
-           if(size) {
-              // read up to 128 byte
-              int c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
-              // pass to function
-              updateFirmware(buff, c);
-              if(len > 0) {
-                 len -= c;
-              }
-           }
-           delay(1);
-      }
-  }else{
-    Serial.println("Cannot download firmware file. Only HTTP response 200: OK is supported. Double check firmware location #defined in HOST.");
+
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
   }
-  client.end();
-  
+  Serial.println("");
+  Serial.print("Connected to ");
+  Serial.println(ssid);
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Hi! This is ElegantOTA AsyncDemo.");
+  });
+
+  ElegantOTA.begin(&server);    // Start ElegantOTA
+  // ElegantOTA callbacks
+  ElegantOTA.onStart(onOTAStart);
+  ElegantOTA.onProgress(onOTAProgress);
+  ElegantOTA.onEnd(onOTAEnd);
+
+  server.begin();
+  Serial.println("HTTP server started");
 }
 
-void loop() {}
-
-// Function to update firmware incrementally
-// Buffer is declared to be 128 so chunks of 128 bytes
-// from firmware is written to device until server closes
-void updateFirmware(uint8_t *data, size_t len){
-  Update.write(data, len);
-  currentLength += len;
-  // Print dots while waiting for update to finish
-  Serial.print('.');
-  // if current length of written firmware is not equal to total firmware size, repeat
-  if(currentLength != totalLength) return;
-  Update.end(true);
-  Serial.printf("\nUpdate Success, Total Size: %u\nRebooting...\n", currentLength);
-  // Restart ESP32 to see changes 
-  ESP.restart();
+void loop(void) {
+  ElegantOTA.loop();
 }
+
+*/
