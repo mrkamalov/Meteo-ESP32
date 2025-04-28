@@ -1,59 +1,40 @@
-#include "sim800Updater.h"
-#include <HardwareSerial.h>
-#include "SPIFFS.h"
-#include "Update.h"
+#include "Sim800Updater.h"
+#include <ArduinoHttpClient.h>
+#include <Update.h>
 #include "const.h"
+#include <FS.h>
+#include <SPIFFS.h>
 
-Sim800Updater::Sim800Updater() {    
-}
-
-void Sim800Updater::init(){
-    initCRCTable();
-    initSim800();
-}
+Sim800Updater::Sim800Updater(){}
 
 void Sim800Updater::performFirmwareUpdate() {
     File firmware = SPIFFS.open(LOCAL_FILE, FILE_READ);
     if (!firmware) {
-        Serial.println("Ошибка: не удалось открыть файл прошивки");
+        SerialMon.println("Ошибка: не удалось открыть файл прошивки");
         return;
     }
 
     size_t firmwareSize = firmware.size();
-    Serial.printf("Размер прошивки: %d байт\n", firmwareSize);
+    SerialMon.printf("Размер прошивки: %d байт\n", firmwareSize);
 
-    if (firmwareSize == 0) {
-        Serial.println("Ошибка: файл прошивки пустой!");
+    if (firmwareSize == 0 || !Update.begin(firmwareSize)) {
+        SerialMon.println("Ошибка подготовки обновления");
         firmware.close();
         return;
     }
 
-    if (!Update.begin(firmwareSize)) {  // Подготовка области OTA
-        Serial.println("Ошибка при подготовке обновления");
-        firmware.close();
-        return;
-    }
-
-    Serial.println("Обновление началось...");
-    
     size_t written = Update.writeStream(firmware);
     if (written != firmwareSize) {
-        Serial.printf("Ошибка записи: записано %d из %d байт\n", written, firmwareSize);
+        SerialMon.printf("Ошибка записи: %d из %d байт\n", written, firmwareSize);
         Update.end();
         firmware.close();
         return;
     }
 
-    if (!Update.end()) {
-        Serial.println("Ошибка завершения обновления");
-        firmware.close();
-        return;
-    }
-
-    if (!Update.isFinished()) {
-        Serial.println("Обновление не завершено!");
+    if (!Update.end() || !Update.isFinished()) {
+        SerialMon.println("Ошибка завершения обновления");
     } else {
-        Serial.println("Обновление завершено. Перезагрузка...");
+        SerialMon.println("Обновление завершено. Перезагрузка...");
         delay(1000);
         ESP.restart();
     }
@@ -61,70 +42,62 @@ void Sim800Updater::performFirmwareUpdate() {
     firmware.close();
 }
 
-// Инициализация таблицы для быстрого вычисления CRC32
 void Sim800Updater::initCRCTable() {
-    uint32_t polynomial = 0xEDB88320;
+    const uint32_t polynomial = 0xEDB88320;
     for (uint32_t i = 0; i < 256; i++) {
         uint32_t crc = i;
         for (int j = 0; j < 8; j++) {
-            if (crc & 1) {
+            if (crc & 1)
                 crc = (crc >> 1) ^ polynomial;
-            } else {
+            else
                 crc >>= 1;
-            }
         }
         crcTable[i] = crc;
     }
 }
 
-// Обновление CRC32 на основе нового байта
 uint32_t Sim800Updater::updateCRC32(uint32_t crc, uint8_t data) {
     return (crc >> 8) ^ crcTable[(crc ^ data) & 0xFF];
 }
 
-// Функция расчета CRC32 для файла в SPIFFS
 uint32_t Sim800Updater::calculateFileCRC32(const char* filePath) {
     File file = SPIFFS.open(filePath, FILE_READ);
     if (!file) {
-        Serial.println("Ошибка открытия файла!");
+        SerialMon.println("Ошибка открытия файла!");
         return 0;
     }
 
-    uint32_t crc = 0xFFFFFFFF;  // Начальное значение CRC32
-    uint8_t buffer[BUFFER_SIZE];
+    uint32_t crc = 0xFFFFFFFF;
+    uint8_t buffer[512];
     size_t bytesRead;
 
-    while ((bytesRead = file.read(buffer, BUFFER_SIZE)) > 0) {
+    while ((bytesRead = file.read(buffer, sizeof(buffer))) > 0) {
         for (size_t i = 0; i < bytesRead; i++) {
             crc = updateCRC32(crc, buffer[i]);
         }
     }
 
     file.close();
-    return crc ^ 0xFFFFFFFF;  // Инверсия итогового значения
+    return crc ^ 0xFFFFFFFF;
 }
 
-void Sim800Updater::sendCommand(String command, int delayTime) {
-    Serial.println("AT Command: " + command);
-    Serial1.println(command);
-    delay(delayTime);
-    while (Serial1.available()) {
-        Serial.write(Serial1.read());  // Отладочный вывод
+void Sim800Updater::sendCommand(const String& command, int delayMs) {
+    SerialMon.println("AT Command: " + command);
+    SerialAT.println(command);
+    delay(delayMs);
+    while (SerialAT.available()) {
+        SerialMon.write(SerialAT.read());
     }
 }
 
 bool Sim800Updater::waitForResponse(const String& expectedResponse, int timeout) {
     unsigned long startTime = millis();
     String response = "";
-    int index;
     while (millis() - startTime < timeout) {
-        while (Serial1.available()) {
-            char c = Serial1.read();
-            Serial.write(c);  // Отладочный вывод
+        while (SerialAT.available()) {
+            char c = SerialAT.read();
             response += c;
-            index = response.indexOf(expectedResponse);
-            if (index != -1) {
-                Serial.printf("Index %d\n", index);
+            if (response.indexOf(expectedResponse) != -1) {
                 return true;
             }
         }
@@ -132,37 +105,21 @@ bool Sim800Updater::waitForResponse(const String& expectedResponse, int timeout)
     return false;
 }
 
-void Sim800Updater::initSim800(void){
-    // Включение питания модема
-    pinMode(MODEM_POWER_PIN, OUTPUT);
-    digitalWrite(MODEM_POWER_PIN, HIGH);
-    Serial.println("SIM800 power on. Wait 6 seconds...");
-    delay(6000);
-    Serial.println("Initializing SIM800...");
-    sendCommand("AT");
-    sendCommand("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"");
-    sendCommand("AT+SAPBR=3,1,\"APN\",\"" + String(apn) + "\"");
-    sendCommand("AT+SAPBR=3,1,\"USER\",\"" + String(gprsUser) + "\"");
-    sendCommand("AT+SAPBR=3,1,\"PWD\",\"" + String(gprsPass) + "\"");
-    sendCommand("AT+SAPBR=1,1");
-    sendCommand("AT+SAPBR=2,1");
-}
-
-bool Sim800Updater::initSpiffs(void) {
+bool Sim800Updater::initSpiffs() {
     if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS Mount Failed");
+        SerialMon.println("SPIFFS Mount Failed");
         return false;
     }
     if (SPIFFS.format()) {
-        Serial.println("SPIFFS formatted successfully!");
+        SerialMon.println("SPIFFS formatted successfully!");
         return true;
     } else {
-        Serial.println("SPIFFS format failed!");
+        SerialMon.println("SPIFFS format failed!");
         return false;
     }
 }
 
-uint32_t Sim800Updater::fetchCRC32() {
+uint32_t Sim800Updater::fetchCRC32() {    
     sendCommand("AT+HTTPINIT");  // Инициализация HTTP
     sendCommand("AT+HTTPPARA=\"CID\",1");  // Выбор профиля GPRS
     sendCommand("AT+HTTPPARA=\"URL\",\"" + String(configUrl) + "\"");
@@ -170,6 +127,7 @@ uint32_t Sim800Updater::fetchCRC32() {
     sendCommand("AT+HTTPACTION=0");  // Отправка HTTP GET
     if (!waitForResponse("+HTTPACTION: 0,200", 10000)) {
         Serial.println("HTTP GET Failed");
+        sendCommand("AT+HTTPTERM");  // Завершение HTTP-сессии
         return 0;
     }
     Serial1.println("AT+HTTPREAD");
@@ -198,11 +156,11 @@ uint32_t Sim800Updater::fetchCRC32() {
 bool Sim800Updater::downloadFirmware (){
     File file = SPIFFS.open(LOCAL_FILE, FILE_WRITE);
     if (!file) {
-        Serial.println("Failed to open file for writing");
+        SerialMon.println("Failed to open file for writing");
         return false;
     }
 
-    Serial.println("Initializing SIM800 FTP...");
+    SerialMon.println("Initializing SIM800 FTP...");
     sendCommand("AT+FTPCID=1");
     sendCommand("AT+FTPSERV=\"" + String(FTP_SERVER) + "\"");
     sendCommand("AT+FTPUN=\"" + String(FTP_USER) + "\"");
@@ -216,26 +174,26 @@ bool Sim800Updater::downloadFirmware (){
     waitForResponse("+FTPGET: 1,1\r\n", 15000);
     int totalBytes = 0;    
     while (true) {
-        //Serial.println("AT Command: AT+FTPGET=2,256");// Запрос данных
-        Serial1.println("AT+FTPGET=2,256");
+        //SerialMon.println("AT Command: AT+FTPGET=2,256");// Запрос данных
+        SerialAT.println("AT+FTPGET=2,256");
         delay(150);//50 ms minimum delay
         String response = "";
-        while (Serial1.available()) {
-            char c = Serial1.read();
+        while (SerialAT.available()) {
+            char c = SerialAT.read();
             response += c;
         }
-        //Serial.println(response);
+        //SerialMon.println(response);
         if (response.indexOf("\r\n+FTPGET: 1,0") != -1) {
             break; // Передача завершена
         }
         
         int startIndex = response.indexOf("+FTPGET: 2,", 2);
-        //Serial.printf("\nstartIndex: %d\n", startIndex);        
+        //SerialMon.printf("\nstartIndex: %d\n", startIndex);        
         if (startIndex != -1) {
             startIndex += 11; // Пропускаем "+FTPGET: 2,"            
             int endIndex = response.indexOf("\r\n", startIndex);
             int availableBytes = response.substring(startIndex, endIndex).toInt();
-            //Serial.printf("availableBytes: %d\n", availableBytes);
+            //SerialMon.printf("availableBytes: %d\n", availableBytes);
             startIndex = endIndex + 2; // Пропускаем "\r\n"
             if (availableBytes > 0) {
                 char c;                
@@ -245,7 +203,7 @@ bool Sim800Updater::downloadFirmware (){
                     }
                     c= response.charAt(i);
                     file.write(response[i]);                    
-                    Serial.printf("%c", c);
+                    SerialMon.printf("%c", c);
                     totalBytes++;
                 }
             }            
@@ -253,30 +211,33 @@ bool Sim800Updater::downloadFirmware (){
     }
     file.close();
     sendCommand("AT+FTPCLOSE", 5000);  // Закрытие FTP-сессии
-    Serial.println("Download complete!");
-    Serial.print("Total bytes downloaded: ");
-    Serial.println(totalBytes);
+    SerialMon.println("Download complete!");
+    SerialMon.print("Total bytes downloaded: ");
+    SerialMon.println(totalBytes);
     return true;
 }
 
-void Sim800Updater::updateFirmwareViaGPRS(){    
-    if (!initSpiffs()) return;        
-    if(downloadFirmware()){
-        // Fetch CRC32 value of the firmware from the server
-        uint32_t serverCRC = fetchCRC32(); 
-        uint32_t fileCRC32 = calculateFileCRC32(LOCAL_FILE);
-        Serial.printf("CRC32 файла: %08X\n", fileCRC32);   
-        if (fileCRC32 == serverCRC) {
-            Serial.println("CRC32 совпадает!");
-            performFirmwareUpdate();
-        } else {
-            Serial.println("Ошибка: CRC32 не совпадает!");
-            return;
-        } 
-    } else {
-        Serial.println("Ошибка загрузки файла прошивки!");
-        return;
-    }  
+bool Sim800Updater::updateFirmwareViaGPRS() {
+    initCRCTable();
+    if (!initSpiffs()) return false;
+
+    if (!downloadFirmware()) {
+        SerialMon.println("Ошибка загрузки файла прошивки!");
+        return false;
+    }
+
+    uint32_t serverCRC = fetchCRC32();
+    uint32_t localCRC = calculateFileCRC32(LOCAL_FILE);
+
+    SerialMon.printf("CRC32 локального файла: 0x%08X\n", localCRC);
+    if (serverCRC == 0 || serverCRC != localCRC) {
+        SerialMon.println("Ошибка: CRC32 не совпадает!");
+        return false;
+    }
+
+    SerialMon.println("CRC32 совпадает!");
+    performFirmwareUpdate();
+    return true;
 }
 
 bool Sim800Updater::checkForUpdates(){

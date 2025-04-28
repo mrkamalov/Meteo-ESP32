@@ -9,10 +9,11 @@
 //void sim868Loop();
 class Sim868Client {
 public:
-  Sim868Client();//Stream &serialAT, Stream &serialMon, int modemPowerPin, int ledPin);
+  Sim868Client(TinyGsm* modem, TinyGsmClient* client, PubSubClient*  mqtt);
 
   void begin();
   void loop();
+  bool isModemConnected();
 
   static void mqttCallbackStatic(char *topic, byte *payload, unsigned int len);
 private:
@@ -23,9 +24,9 @@ private:
     void handleMqttMessage(char *topic, byte *payload, unsigned int len);
 
     static Sim868Client *instance;
-    TinyGsm       modem;
-    TinyGsmClient client;
-    PubSubClient  mqtt;
+    TinyGsm* _gsmModem;
+    TinyGsmClient* _gsmClient;
+    PubSubClient* _mqttClient;
 
     int ledStatus = LOW;
     int ledFieldNum = 1;

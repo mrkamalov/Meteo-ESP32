@@ -8,7 +8,8 @@
 
 Sim868Client* Sim868Client::instance = nullptr;
 
-Sim868Client::Sim868Client() : modem(SerialAT), client(modem), mqtt(client){
+Sim868Client::Sim868Client(TinyGsm* modem, TinyGsmClient* client, PubSubClient*  mqtt)
+  : _gsmModem(modem), _gsmClient(client), _mqttClient(mqtt) {
     instance = this; 
 }
 
@@ -47,7 +48,7 @@ void Sim868Client::mqttPublish(long pubChannelID, int dataArray[], int fieldArra
     
     // Create a topic string and publish data to ThingSpeak channel feed.
      String topicString ="channels/" + String( pubChannelID ) + "/publish";
-    mqtt.publish( topicString.c_str(), dataString.c_str() );
+    _mqttClient->publish( topicString.c_str(), dataString.c_str() );
     Serial.println( "Published to channel " + String( pubChannelID ) );
 }
 
@@ -91,12 +92,12 @@ int Sim868Client::mqttSubscribe( long subChannelID, int field, int unsubSub ){
     }
     
     Serial.println( "Subscribing to " +myTopic );
-    Serial.println( "State= " + String( mqtt.state() ) );
+    Serial.println( "State= " + String(_mqttClient->state() ) );
 
     if ( unsubSub==1 ){
-        return mqtt.unsubscribe(myTopic.c_str());
+        return _mqttClient->unsubscribe(myTopic.c_str());
     }
-    return mqtt.subscribe( myTopic.c_str() ,0 );
+    return _mqttClient->subscribe( myTopic.c_str() ,0 );
 }
 
 boolean Sim868Client::mqttConnect() {
@@ -107,7 +108,7 @@ boolean Sim868Client::mqttConnect() {
   //boolean status = mqtt.connect("GsmClientTest");
 
   // Or, if you want to authenticate MQTT:
-  boolean status = mqtt.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD);
+  boolean status = _mqttClient->connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD);
 
   if (status == false) {
     SerialMon.println(" fail");
@@ -117,7 +118,7 @@ boolean Sim868Client::mqttConnect() {
   if(mqttSubscribe(MQTT_CHANNEL_ID,ledFieldNum,SUBSCRIBE_TO_CHANNEL )==1 ){
     Serial.println( " Subscribed " );
   }
-  return mqtt.connected();
+  return _mqttClient->connected();
 }
 
 
@@ -134,71 +135,71 @@ void Sim868Client::begin() {
   // Restart takes quite some time
   // To skip it, call init() instead of restart()
   SerialMon.println("Initializing modem...");
-  modem.restart();
+  _gsmModem->restart();
   // modem.init();
 
-  String modemInfo = modem.getModemInfo();
+  String modemInfo = _gsmModem->getModemInfo();
   SerialMon.print("Modem Info: ");
   SerialMon.println(modemInfo);
 
   // Unlock your SIM card with a PIN if needed
-  if (GSM_PIN && modem.getSimStatus() != 3) { modem.simUnlock(GSM_PIN); }
+  if (GSM_PIN && _gsmModem->getSimStatus() != 3) { _gsmModem->simUnlock(GSM_PIN); }
 
   SerialMon.print("Waiting for network...");
-  if (!modem.waitForNetwork()) {
+  if (!_gsmModem->waitForNetwork()) {
     SerialMon.println(" fail");
     delay(10000);
     return;
   }
   SerialMon.println(" success");
 
-  if (modem.isNetworkConnected()) { SerialMon.println("Network connected"); }
+  if (_gsmModem->isNetworkConnected()) { SerialMon.println("Network connected"); }
 
   // GPRS connection parameters are usually set after network registration
   SerialMon.print(F("Connecting to "));
   SerialMon.print(APN);
-  if (!modem.gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
+  if (!_gsmModem->gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
     SerialMon.println(" fail");
     delay(10000);
     return;
   }
   SerialMon.println(" success");
 
-  if (modem.isGprsConnected()) { SerialMon.println("GPRS connected"); }
+  if (_gsmModem->isGprsConnected()) { SerialMon.println("GPRS connected"); }
 
   // MQTT Broker setup
-  mqtt.setServer(MQTT_BROKER, MQTT_PORT);
-  mqtt.setCallback(mqttCallbackStatic);
+  _mqttClient->setServer(MQTT_BROKER, MQTT_PORT);
+  _mqttClient->setCallback(mqttCallbackStatic);
 }
 
 void Sim868Client::loop() {
   // Make sure we're still registered on the network
-  if (!modem.isNetworkConnected()) {
+  if (!_gsmModem->isNetworkConnected()) {
     SerialMon.println("Network disconnected");
-    if (!modem.waitForNetwork(180000L, true)) {
+    if (!_gsmModem->waitForNetwork(180000L, true)) {
       SerialMon.println(" fail");
       delay(10000);
       return;
     }
-    if (modem.isNetworkConnected()) {
+    if (_gsmModem->isNetworkConnected()) {
       SerialMon.println("Network re-connected");
     }
 
     // and make sure GPRS/EPS is still connected
-    if (!modem.isGprsConnected()) {
+    if (!_gsmModem->isGprsConnected()) {
       SerialMon.println("GPRS disconnected!");
       SerialMon.print(F("Connecting to "));
       SerialMon.print(APN);
-      if (!modem.gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
+      if (!_gsmModem->gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
         SerialMon.println(" fail");
         delay(10000);
         return;
       }
-      if (modem.isGprsConnected()) { SerialMon.println("GPRS reconnected"); }
+      if (_gsmModem->isGprsConnected()) { SerialMon.println("GPRS reconnected"); }
     }
   }
 
-  if (!mqtt.connected()) {
+  if (!_mqttClient->connected()) {
     SerialMon.println("=== MQTT NOT CONNECTED ===");
     // Reconnect every 10 seconds
     uint32_t t = millis();
@@ -210,5 +211,9 @@ void Sim868Client::loop() {
     return;
   }
 
-  mqtt.loop();
+  _mqttClient->loop();
+}
+
+bool Sim868Client::isModemConnected() {
+  return _gsmModem->isNetworkConnected() && _gsmModem->isGprsConnected();
 }

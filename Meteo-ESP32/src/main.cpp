@@ -1,10 +1,8 @@
 #include <HardwareSerial.h>
-#include "sim800Updater.h"
 #include "TransmissionManager.h"
 
 #define MODEM_RX 18
 #define MODEM_TX 17
-static Sim800Updater simUpdater;
 static TransmissionManager transmissionManager;
 
 void setup() {
