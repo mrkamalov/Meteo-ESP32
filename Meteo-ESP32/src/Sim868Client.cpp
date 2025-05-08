@@ -170,6 +170,18 @@ void Sim868Client::begin() {
   // MQTT Broker setup
   _mqttClient->setServer(MQTT_BROKER, MQTT_PORT);
   _mqttClient->setCallback(mqttCallbackStatic);
+
+  // Проверка связи
+  int signalQuality = _gsmModem->getSignalQuality();
+  Serial.print("Уровень сигнала: ");
+  Serial.print(signalQuality);
+  Serial.println(" (0-31, где 31 = максимальный сигнал)");
+
+  if (signalQuality <= 5) {
+    Serial.println("⚠️ Сигнал слабый! Проверьте антенну или покрытие.");
+  } else {
+    Serial.println("✅ Сигнал в порядке.");
+  }
 }
 
 void Sim868Client::loop() {
