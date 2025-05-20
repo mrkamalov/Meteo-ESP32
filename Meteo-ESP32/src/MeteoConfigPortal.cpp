@@ -1,6 +1,7 @@
 #include "MeteoConfigPortal.h"
 #include <EEPROM.h>
 #include <ESPmDNS.h>
+#include "sim868Config.h"
 
 // ==== Конструктор ====
 MeteoConfigPortal::MeteoConfigPortal() : server(80) {}
@@ -17,21 +18,21 @@ void MeteoConfigPortal::begin() {
         EEPROM.commit();
     }
     deviceId = EEPROM.read(DEVICE_ID_ADDR) | (EEPROM.read(DEVICE_ID_ADDR + 1) << 8);    
-    Serial.println("Device ID: " + String(deviceId));
+    SerialMon.println("Device ID: " + String(deviceId));
     loadWiFiSettings();
     loadDevicesFromEEPROM();
     loadGPRSSettings();
     loadTransferPriority();
     if (connectToWiFi()) {
-        Serial.println("Connected to WiFi: " + wifiSSID);
-        Serial.println("IP Address: " + WiFi.localIP().toString());
+        SerialMon.println("Connected to WiFi: " + wifiSSID);
+        SerialMon.println("IP Address: " + WiFi.localIP().toString());
     }
     else{
-        Serial.println("Failed to connect to WiFi. Starting AP...");
+        SerialMon.println("Failed to connect to WiFi. Starting AP...");
         startAccessPoint();
     }
     if (MDNS.begin("meteo"+String(deviceId))) {
-        Serial.println("MDNS responder started: http://meteo"+String(deviceId)+".local");
+        SerialMon.println("MDNS responder started: http://meteo"+String(deviceId)+".local");
     }
     setupWebServer();
     ElegantOTA.begin(&server);
@@ -43,9 +44,9 @@ void MeteoConfigPortal::loop() {
         if (apActive) {
             WiFi.softAPdisconnect(true);
             apActive = false;
-            Serial.println("Disconnected AP due to WiFi STA connection");
-            Serial.println("Connected to WiFi: " + wifiSSID);
-            Serial.println("IP Address: " + WiFi.localIP().toString());            
+            SerialMon.println("Disconnected AP due to WiFi STA connection");
+            SerialMon.println("Connected to WiFi: " + wifiSSID);
+            SerialMon.println("IP Address: " + WiFi.localIP().toString());            
         }
     }
     else{
@@ -55,9 +56,9 @@ void MeteoConfigPortal::loop() {
         if (apActive) {
             if(currentMillis - lastApCheck > apCheckInterval){
                 lastApCheck = currentMillis;
-                Serial.println("Checking AP status...");
+                SerialMon.println("Checking AP status...");
                 if (WiFi.softAPgetStationNum() == 0) {
-                    Serial.println("Cycling AP: No clients connected");
+                    SerialMon.println("Cycling AP: No clients connected");
                     WiFi.softAPdisconnect(true);
                     apActive = false;
                     apRestartPending = true;
@@ -65,7 +66,7 @@ void MeteoConfigPortal::loop() {
                     lastWifiCheck = currentMillis; // Сброс таймера WiFi проверки
                 }
                 else{
-                    Serial.println("AP active: " + String(WiFi.softAPgetStationNum()) + " clients connected");
+                    SerialMon.println("AP active: " + String(WiFi.softAPgetStationNum()) + " clients connected");
                 }
             }            
         }
@@ -73,7 +74,7 @@ void MeteoConfigPortal::loop() {
             // Проверка подключения к WiFi
             if (currentMillis - lastWifiCheck > wifiCheckInterval) {
                 lastWifiCheck = currentMillis;
-                Serial.println("Restarting WiFi AP...");
+                SerialMon.println("Restarting WiFi AP...");
                 startAccessPoint();
             }
             // Отложенный запуск точки доступа
@@ -90,7 +91,7 @@ void MeteoConfigPortal::startAccessPoint() {
     WiFi.softAP("MeteoConfig"+String(deviceId));
     apActive = true;
     lastApCheck = millis();
-    Serial.println("Started Access Point");
+    SerialMon.println("Started Access Point");
 }
 
 
@@ -101,7 +102,7 @@ bool MeteoConfigPortal::connectToWiFi() {
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
         delay(500);
-        Serial.print(".");
+        SerialMon.print(".");
     }
     return WiFi.status() == WL_CONNECTED;
 }
@@ -130,7 +131,7 @@ void MeteoConfigPortal::saveWiFiSettings(const String& ssid, const String& pass)
 void MeteoConfigPortal::saveDevicesToEEPROM() {
     int addr = DEVICE_LIST_ADDR;
     int count = meteoDevices.size();
-    Serial.println("Devices count: " + String(count));
+    SerialMon.println("Devices count: " + String(count));
     EEPROM.write(addr++, count);
     for (const auto &dev : meteoDevices) {
         EEPROM.write(addr++, dev.id);
@@ -140,10 +141,10 @@ void MeteoConfigPortal::saveDevicesToEEPROM() {
         EEPROM.write(addr++, '\0');
     }
     if(!EEPROM.commit()) {
-        Serial.println("Ошибка записи в EEPROM");
+        SerialMon.println("Ошибка записи в EEPROM");
     }
     else {
-        Serial.println("Устройства сохранены в EEPROM");
+        SerialMon.println("Устройства сохранены в EEPROM");
     }
 }
 
@@ -152,7 +153,7 @@ void MeteoConfigPortal::loadDevicesFromEEPROM() {
     meteoDevices.clear();
     int addr = DEVICE_LIST_ADDR;
     int count = EEPROM.read(addr++);
-    Serial.println("Devices count: " + String(count));
+    SerialMon.println("Devices count: " + String(count));
     if (count < 0 || count > (EEPROM_SIZE - DEVICE_LIST_ADDR) / sizeof(MeteoDevice)) return; // Проверка на корректность данных
     
     for (int i = 0; i < count; i++) {
@@ -184,10 +185,10 @@ void MeteoConfigPortal::saveDeviceId(int id) {
 }
 
 void MeteoConfigPortal::saveGPRSSettings(String apn, String user, String pass) {
-    Serial.println("Saving GPRS settings...");
-    Serial.println("APN: " + apn);
-    Serial.println("User: " + user);
-    Serial.println("Pass: " + pass);
+    SerialMon.println("Saving GPRS settings...");
+    SerialMon.println("APN: " + apn);
+    SerialMon.println("User: " + user);
+    SerialMon.println("Pass: " + pass);
     for (int i = 0; i < 20; i++) EEPROM.write(GPRS_APN_ADDR + i, i < apn.length() ? apn[i] : 0);
     for (int i = 0; i < 20; i++) EEPROM.write(GPRS_USER_ADDR + i, i < user.length() ? user[i] : 0);
     for (int i = 0; i < 20; i++) EEPROM.write(GPRS_PASS_ADDR + i, i < pass.length() ? pass[i] : 0);

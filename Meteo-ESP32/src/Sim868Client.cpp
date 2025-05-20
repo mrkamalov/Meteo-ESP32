@@ -44,12 +44,12 @@ void Sim868Client::mqttPublish(long pubChannelID, int dataArray[], int fieldArra
         index++;
     }
     
-    Serial.println( dataString );
+    SerialMon.println( dataString );
     
     // Create a topic string and publish data to ThingSpeak channel feed.
      String topicString ="channels/" + String( pubChannelID ) + "/publish";
     _mqttClient->publish( topicString.c_str(), dataString.c_str() );
-    Serial.println( "Published to channel " + String( pubChannelID ) );
+    SerialMon.println( "Published to channel " + String( pubChannelID ) );
 }
 
 void Sim868Client::handleMqttMessage(char* topic, byte* payload, unsigned int len) {
@@ -91,8 +91,8 @@ int Sim868Client::mqttSubscribe( long subChannelID, int field, int unsubSub ){
         myTopic="channels/"+String( subChannelID )+"/subscribe/fields/field"+String( field );
     }
     
-    Serial.println( "Subscribing to " +myTopic );
-    Serial.println( "State= " + String(_mqttClient->state() ) );
+    SerialMon.println( "Subscribing to " +myTopic );
+    SerialMon.println( "State= " + String(_mqttClient->state() ) );
 
     if ( unsubSub==1 ){
         return _mqttClient->unsubscribe(myTopic.c_str());
@@ -116,7 +116,7 @@ boolean Sim868Client::mqttConnect() {
   }
   SerialMon.println(" success");
   if(mqttSubscribe(MQTT_CHANNEL_ID,ledFieldNum,SUBSCRIBE_TO_CHANNEL )==1 ){
-    Serial.println( " Subscribed " );
+    SerialMon.println( " Subscribed " );
   }
   return _mqttClient->connected();
 }
@@ -173,14 +173,14 @@ void Sim868Client::begin() {
 
   // Проверка связи
   int signalQuality = _gsmModem->getSignalQuality();
-  Serial.print("Уровень сигнала: ");
-  Serial.print(signalQuality);
-  Serial.println(" (0-31, где 31 = максимальный сигнал)");
+  SerialMon.print("Уровень сигнала: ");
+  SerialMon.print(signalQuality);
+  SerialMon.println(" (0-31, где 31 = максимальный сигнал)");
 
   if (signalQuality <= 5) {
-    Serial.println("⚠️ Сигнал слабый! Проверьте антенну или покрытие.");
+    SerialMon.println("⚠️ Сигнал слабый! Проверьте антенну или покрытие.");
   } else {
-    Serial.println("✅ Сигнал в порядке.");
+    SerialMon.println("✅ Сигнал в порядке.");
   }
 }
 

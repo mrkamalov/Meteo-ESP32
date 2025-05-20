@@ -34,8 +34,9 @@ private:
     static const int GPRS_USER_ADDR = 70;
     static const int GPRS_PASS_ADDR = 90;
     static const int TRANSFER_PRIORITY_ADDR  = 110;
-    static const int DEVICE_ID_ADDR = 114;
-    static const int DEVICE_LIST_ADDR = 118;
+    //Added space for fw version 8 bytes
+    static const int DEVICE_ID_ADDR = 122;
+    static const int DEVICE_LIST_ADDR = 126;
 
     AsyncWebServer server;
     std::vector<struct MeteoDevice> meteoDevices;

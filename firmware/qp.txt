@@ -14,3 +14,18 @@ login mrkamalov001
 pass PSc2q@UVSn5rayc
 ip 66.220.9.50 (ftp.drivehq.com)
 port 21 (FTP/SSL)
+
+VMS-Ecoftp
+172.30.56.14 admin1 1S-WqimX
+login meteoesp
+pass mD7t_i@J?J8}
+
+VMS-Ecomqqt
+172.30.56.13 admin1 1S-WqimX		ssh admin1@172.30.56.13
+login
+pass 
+
+
+ftpcouch.couchdrop.io
+login couchuser
+password lqKJ4MAUy8g0g06IB8rn

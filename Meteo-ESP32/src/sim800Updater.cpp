@@ -1,13 +1,16 @@
 #include "Sim800Updater.h"
-#include <ArduinoHttpClient.h>
 #include <Update.h>
 #include "const.h"
 #include <FS.h>
 #include <SPIFFS.h>
+#include <EEPROM.h>
+#include "CRC32Utils.h"
+#include "ServerSettings.h"
 
 Sim800Updater::Sim800Updater(){}
 
-void Sim800Updater::performFirmwareUpdate() {
+void Sim800Updater::performFirmwareUpdate(String& newVersion) {
+    SerialMon.println("Начало обновления прошивки...");
     File firmware = SPIFFS.open(LOCAL_FILE, FILE_READ);
     if (!firmware) {
         SerialMon.println("Ошибка: не удалось открыть файл прошивки");
@@ -36,28 +39,12 @@ void Sim800Updater::performFirmwareUpdate() {
     } else {
         SerialMon.println("Обновление завершено. Перезагрузка...");
         delay(1000);
+        // Сохраняем версию прошивки в EEPROM        
+        saveVersionToEEPROM(newVersion);            
         ESP.restart();
     }
 
     firmware.close();
-}
-
-void Sim800Updater::initCRCTable() {
-    const uint32_t polynomial = 0xEDB88320;
-    for (uint32_t i = 0; i < 256; i++) {
-        uint32_t crc = i;
-        for (int j = 0; j < 8; j++) {
-            if (crc & 1)
-                crc = (crc >> 1) ^ polynomial;
-            else
-                crc >>= 1;
-        }
-        crcTable[i] = crc;
-    }
-}
-
-uint32_t Sim800Updater::updateCRC32(uint32_t crc, uint8_t data) {
-    return (crc >> 8) ^ crcTable[(crc ^ data) & 0xFF];
 }
 
 uint32_t Sim800Updater::calculateFileCRC32(const char* filePath) {
@@ -98,6 +85,7 @@ bool Sim800Updater::waitForResponse(const String& expectedResponse, int timeout)
             char c = SerialAT.read();
             response += c;
             if (response.indexOf(expectedResponse) != -1) {
+                SerialMon.println("Response: " + response);
                 return true;
             }
         }
@@ -117,40 +105,6 @@ bool Sim800Updater::initSpiffs() {
         SerialMon.println("SPIFFS format failed!");
         return false;
     }
-}
-
-uint32_t Sim800Updater::fetchCRC32() {    
-    sendCommand("AT+HTTPINIT");  // Инициализация HTTP
-    sendCommand("AT+HTTPPARA=\"CID\",1");  // Выбор профиля GPRS
-    sendCommand("AT+HTTPPARA=\"URL\",\"" + String(configUrl) + "\"");
-    sendCommand("AT+HTTPSSL=1");  // Включить SSL
-    sendCommand("AT+HTTPACTION=0");  // Отправка HTTP GET
-    if (!waitForResponse("+HTTPACTION: 0,200", 10000)) {
-        Serial.println("HTTP GET Failed");
-        sendCommand("AT+HTTPTERM");  // Завершение HTTP-сессии
-        return 0;
-    }
-    Serial1.println("AT+HTTPREAD");
-    delay(1000);
-    String response = "";
-    while (Serial1.available()) {
-        char c = Serial1.read();
-        response += c;
-    }    
-    uint32_t crc32_value = 0;
-    int responseIndex = response.indexOf("+HTTPREAD: ");
-    int startIndex = response.indexOf("\r\n", responseIndex);
-    if (startIndex != -1) {
-        startIndex += 2;  // Пропускаем "\r\n"
-        int endIndex = response.indexOf("\r\n", startIndex);  // Ищем конец числа
-        if (endIndex != -1) {
-            String crcString = response.substring(startIndex, endIndex);
-            sscanf(crcString.c_str(), "%x", &crc32_value);
-        }
-    }
-    Serial.printf("CRC32: 0x%08X\n", crc32_value);
-    sendCommand("AT+HTTPTERM");  // Завершение HTTP-сессии
-    return crc32_value;
 }
 
 bool Sim800Updater::downloadFirmware (){
@@ -210,7 +164,9 @@ bool Sim800Updater::downloadFirmware (){
         }
     }
     file.close();
-    sendCommand("AT+FTPCLOSE", 5000);  // Закрытие FTP-сессии
+    sendCommand("AT+FTPQUIT", 5000);  // Закрытие FTP-сессии
+    SerialMon.println("");
+    SerialMon.println("");
     SerialMon.println("Download complete!");
     SerialMon.print("Total bytes downloaded: ");
     SerialMon.println(totalBytes);
@@ -218,6 +174,15 @@ bool Sim800Updater::downloadFirmware (){
 }
 
 bool Sim800Updater::updateFirmwareViaGPRS() {
+    String newVersion = "";
+    uint32_t serverCRC;
+
+    if(checkForUpdates(newVersion, serverCRC)) {
+        SerialMon.println("Обновление доступно!");
+    } else {
+        SerialMon.println("Обновление не требуется.");
+        return false;
+    }
     initCRCTable();
     if (!initSpiffs()) return false;
 
@@ -225,8 +190,7 @@ bool Sim800Updater::updateFirmwareViaGPRS() {
         SerialMon.println("Ошибка загрузки файла прошивки!");
         return false;
     }
-
-    uint32_t serverCRC = fetchCRC32();
+    
     uint32_t localCRC = calculateFileCRC32(LOCAL_FILE);
 
     SerialMon.printf("CRC32 локального файла: 0x%08X\n", localCRC);
@@ -236,10 +200,130 @@ bool Sim800Updater::updateFirmwareViaGPRS() {
     }
 
     SerialMon.println("CRC32 совпадает!");
-    performFirmwareUpdate();
+    performFirmwareUpdate(newVersion);
     return true;
 }
 
-bool Sim800Updater::checkForUpdates(){
-    return false;
-} 
+String Sim800Updater::readLocalVersion() {
+    String version = "";
+    for (int i = 0; i < FW_VERSION_SIZE; i++) { // максимум 8 символов
+        char c = EEPROM.read(FW_VERSION_ADDR + i);
+        if (c == '\0' || c == 0xFF) break;
+        version += c;
+    }
+    version.trim();
+    SerialMon.printf("Локальная версия: %s\n", version.c_str());
+    return version;
+}
+
+void Sim800Updater::saveVersionToEEPROM(const String& version) {
+    for (int i = 0; i < FW_VERSION_SIZE; i++) {
+        if (i < version.length()) {
+            EEPROM.write(FW_VERSION_ADDR + i, version[i]);
+        } else {
+            EEPROM.write(FW_VERSION_ADDR + i, '\0');
+        }
+    }
+    EEPROM.commit();
+    SerialMon.println("Версия прошивки сохранена в EEPROM");
+}
+
+bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC) {
+    SerialMon.println("Загрузка версии из FTP...");
+
+    sendCommand("AT+FTPCID=1");
+    sendCommand("AT+FTPSERV=\"" + String(FTP_SERVER) + "\"");
+    sendCommand("AT+FTPUN=\"" + String(FTP_USER) + "\"");
+    sendCommand("AT+FTPPW=\"" + String(FTP_PASS) + "\"");
+    sendCommand("AT+FTPTYPE=A");  // Текстовый режим
+    sendCommand("AT+FTPGETNAME=\"config.txt\"");
+    sendCommand("AT+FTPGETPATH=\"/\"");
+
+    sendCommand("AT+FTPGET=1");
+    delay(3000);
+    waitForResponse("+FTPGET: 1,1", 10000);
+
+    String response = "";
+    delay(300);
+    SerialAT.println("AT+FTPGET=2,256");        
+    delay(300);
+    while (SerialAT.available()) {
+        response += (char)SerialAT.read();
+    }
+    SerialMon.println(response);
+
+    // Парсинг строки
+    int dataStart = response.indexOf("+FTPGET: 2,");
+    if (dataStart == -1) return false;
+
+    int crlf = response.indexOf("\r\n", dataStart);
+    if (crlf == -1) return false;
+
+    int dataBegin = crlf + 2;
+    int dataEnd = response.indexOf("\r\n", dataBegin);
+    if (dataEnd == -1) return false;
+
+    String line = response.substring(dataBegin, dataEnd);
+    line.trim();
+    SerialMon.print("Строка конфигурации: ");
+    SerialMon.println(line);
+
+    // Ожидаем формат: "1.0.0 1234567890"
+    int sep = line.indexOf(' ');
+    if (sep == -1) return false;
+
+    version = line.substring(0, sep);
+    String crcStr = line.substring(sep + 1);
+
+    // Проверка формата версии
+    if (!isValidVersionFormat(version)) {
+        Serial.printf("Invalid version format: %s\n", version.c_str());
+        return false;
+    }
+
+    remoteCRC = crcStr.toInt();
+    if (remoteCRC == 0) {
+        SerialMon.println("Некорректный CRC.");
+        return false;
+    }
+
+    // Закрытие FTP-сессии
+    sendCommand("AT+FTPQUIT", 3000);
+    SerialMon.printf("Версия: %s, CRC: %lu\n", version.c_str(), remoteCRC);
+    return true;
+}
+
+bool Sim800Updater::isValidVersionFormat(const String& version) {
+    int dot1 = version.indexOf('.');
+    int dot2 = version.indexOf('.', dot1 + 1);
+
+    // Должно быть две точки
+    if (dot1 == -1 || dot2 == -1 || version.indexOf('.', dot2 + 1) != -1) {
+        return false;
+    }
+
+    String major = version.substring(0, dot1);
+    String minor = version.substring(dot1 + 1, dot2);
+    String patch = version.substring(dot2 + 1);
+
+    // Все три части должны быть числами
+    return major.length() > 0 && minor.length() > 0 && patch.length() > 0 &&
+           major.toInt() >= 0 && minor.toInt() >= 0 && patch.toInt() >= 0;
+}
+
+bool Sim800Updater::checkForUpdates(String &version, uint32_t &remoteCRC) {
+    //return false;
+    String currentVersion = readLocalVersion();
+
+    if (!fetchConfigFromFTP(version, remoteCRC)) {
+        SerialMon.println("Ошибка загрузки версии и CRC.");
+        return false;
+    }
+
+    if (version == "" || version == currentVersion) {
+        Serial.println("No update required.");
+        return false;
+    }
+
+    return true;
+}

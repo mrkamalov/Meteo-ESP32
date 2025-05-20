@@ -8,22 +8,20 @@ class Sim800Updater {
 public:
     Sim800Updater();
 
-    bool updateFirmwareViaGPRS();
-    bool checkForUpdates();
+    bool updateFirmwareViaGPRS();    
 
-private:
-    void initCRCTable();
-    uint32_t updateCRC32(uint32_t crc, uint8_t data);
+private:    
     uint32_t calculateFileCRC32(const char* filePath);
     bool initSpiffs();
-    void performFirmwareUpdate();
+    void performFirmwareUpdate(String& newVersion);
     void sendCommand(const String& command, int delayMs = 500);
     bool waitForResponse(const String& expected, int timeout);
     bool downloadFirmware();
-    // HTTP CRC fetch
-    uint32_t fetchCRC32();
-
-    uint32_t crcTable[256];    
+    bool fetchConfigFromFTP(String &version, uint32_t &remoteCRC);    
+    String readLocalVersion();
+    void saveVersionToEEPROM(const String& version);    
+    bool checkForUpdates(String &version, uint32_t &remoteCRC);
+    bool isValidVersionFormat(const String& version);
 };
 
 #endif
