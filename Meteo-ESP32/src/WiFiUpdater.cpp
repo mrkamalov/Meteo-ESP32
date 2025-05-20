@@ -110,6 +110,14 @@ uint32_t WiFiUpdater::calculateLocalCRC32(const char* path) {
 }
 
 bool WiFiUpdater::downloadFile(const String& url, const char* path) {
+    int totalLength;       //total size of firmware
+
+    File file = SPIFFS.open(path, FILE_WRITE);
+    if (!file) {
+        SerialMon.println("Failed to open local file for writing");        
+        return false;
+    }
+
     HTTPClient http;
     http.begin(url);
     int httpCode = http.GET();
@@ -118,22 +126,28 @@ bool WiFiUpdater::downloadFile(const String& url, const char* path) {
         http.end();
         return false;
     }
-
-    File file = SPIFFS.open(path, FILE_WRITE);
-    if (!file) {
-        SerialMon.println("Failed to open local file for writing");
-        http.end();
-        return false;
-    }
-
+    totalLength = http.getSize();
+    int len = totalLength;
+    int bytesRead = 0; // bytes read so far
+    SerialMon.printf("File size: %d bytes\n", totalLength);
     WiFiClient* stream = http.getStreamPtr();
     uint8_t buf[128];
-    int len;
-    while ((len = stream->available())) {
-        int r = stream->readBytes(buf, min(len, 128));
-        file.write(buf, r);
-    }
-
+    while(http.connected() && (len > 0 || len == -1)) {
+        // get available data size
+        size_t size = stream->available();
+        if(size) {
+            // read up to 128 byte
+            bytesRead += (size > sizeof(buf))? sizeof(buf) : size;
+            int c = stream->readBytes(buf, ((size > sizeof(buf)) ? sizeof(buf) : size));
+            // pass to function
+            file.write(buf, c);
+            if(len > 0) {
+                len -= c;
+            }
+        }
+        delay(1);
+    }    
+    SerialMon.printf("Downloaded %d bytes\n", bytesRead);
     file.close();
     http.end();
     return true;
@@ -150,7 +164,7 @@ bool WiFiUpdater::updateFirmware() {
         return false;
     }
 
-    String localVersion = "";//readEEPROMVersion();
+    String localVersion = readEEPROMVersion();
     SerialMon.printf("Local version: %s, Remote version: %s\n", localVersion.c_str(), remoteVersion.c_str());
 
     if (remoteVersion == "" || remoteVersion == localVersion) {

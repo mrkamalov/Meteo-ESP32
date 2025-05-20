@@ -38,6 +38,7 @@
         "utility": "cpp",
         "regex": "cpp",
         "list": "cpp",
-        "initializer_list": "cpp"
+        "initializer_list": "cpp",
+        "bitset": "cpp"
     }
 }

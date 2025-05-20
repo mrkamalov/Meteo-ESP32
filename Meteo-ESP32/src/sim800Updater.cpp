@@ -179,8 +179,7 @@ bool Sim800Updater::updateFirmwareViaGPRS() {
 
     if(checkForUpdates(newVersion, serverCRC)) {
         SerialMon.println("Обновление доступно!");
-    } else {
-        SerialMon.println("Обновление не требуется.");
+    } else {        
         return false;
     }
     initCRCTable();
@@ -289,7 +288,7 @@ bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC) {
 
     // Закрытие FTP-сессии
     sendCommand("AT+FTPQUIT", 3000);
-    SerialMon.printf("Версия: %s, CRC: %lu\n", version.c_str(), remoteCRC);
+    SerialMon.printf("Версия: %s, CRC: %08X\n", version.c_str(), remoteCRC);
     return true;
 }
 
