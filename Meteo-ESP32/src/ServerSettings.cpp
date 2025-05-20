@@ -4,7 +4,7 @@
 const char* FTP_SERVER = "ftpcouch.couchdrop.io";
 const char* FTP_USER = "couchuser";
 const char* FTP_PASS = "lqKJ4MAUy8g0g06IB8rn";
-const char* HTTP_SERVER = "172.30.56.14";
+const char* HTTP_SERVER = "https://mrkamalov.github.io/Meteo-ESP32/firmware";//"172.30.56.14";
 // const char* FTP_USER = "meteoesp";
 // const char* FTP_PASS = "mD7t_i@J?J8}";
 // const char* FTP_SERVER = "66.220.9.50";

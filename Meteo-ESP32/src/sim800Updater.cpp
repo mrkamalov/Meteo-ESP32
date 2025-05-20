@@ -280,8 +280,8 @@ bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC) {
         Serial.printf("Invalid version format: %s\n", version.c_str());
         return false;
     }
-
-    remoteCRC = crcStr.toInt();
+    
+    remoteCRC = (uint32_t)strtoul(crcStr.c_str(), nullptr, 16);
     if (remoteCRC == 0) {
         SerialMon.println("Некорректный CRC.");
         return false;

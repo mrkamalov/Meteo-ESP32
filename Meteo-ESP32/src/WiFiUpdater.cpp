@@ -47,7 +47,7 @@ bool WiFiUpdater::fetchRemoteConfig(String& version, uint32_t& crc) {
     http.begin(String(HTTP_SERVER) + "/" + CONFIG_FILE); // config.txt
     int httpCode = http.GET();
     if (httpCode != 200) {
-        Serial.printf("Failed to fetch config.txt, HTTP code: %d\n", httpCode);
+        SerialMon.printf("Failed to fetch config.txt, HTTP code: %d\n", httpCode);
         http.end();
         return false;
     }
@@ -55,10 +55,11 @@ bool WiFiUpdater::fetchRemoteConfig(String& version, uint32_t& crc) {
     String config = http.getString();
     http.end();
     config.trim();
+    SerialMon.printf("Fetched config: %s\n", config.c_str());
 
     int spaceIdx = config.indexOf(' ');
     if (spaceIdx == -1) {
-        Serial.println("Invalid config.txt format! No space separator.");
+        SerialMon.println("Invalid config.txt format! No space separator.");
         return false;
     }
 
@@ -68,11 +69,11 @@ bool WiFiUpdater::fetchRemoteConfig(String& version, uint32_t& crc) {
 
     // Проверка формата версии
     if (!isValidVersionFormat(version)) {
-        Serial.printf("Invalid version format: %s\n", version.c_str());
+        SerialMon.printf("Invalid version format: %s\n", version.c_str());
         return false;
     }
 
-    crc = strtoul(crcStr.c_str(), nullptr, 10);
+    crc = (uint32_t)strtoul(crcStr.c_str(), nullptr, 16);
     return true;
 }
 
@@ -113,14 +114,14 @@ bool WiFiUpdater::downloadFile(const String& url, const char* path) {
     http.begin(url);
     int httpCode = http.GET();
     if (httpCode != 200) {
-        Serial.printf("Failed to download file from %s, code: %d\n", url.c_str(), httpCode);
+        SerialMon.printf("Failed to download file from %s, code: %d\n", url.c_str(), httpCode);
         http.end();
         return false;
     }
 
     File file = SPIFFS.open(path, FILE_WRITE);
     if (!file) {
-        Serial.println("Failed to open local file for writing");
+        SerialMon.println("Failed to open local file for writing");
         http.end();
         return false;
     }
@@ -139,37 +140,37 @@ bool WiFiUpdater::downloadFile(const String& url, const char* path) {
 }
 
 bool WiFiUpdater::updateFirmware() {
-    Serial.println("Checking for firmware update...");    
+    SerialMon.println("Checking for firmware update...");    
 
     String remoteVersion;
     uint32_t remoteCRC;
 
     if (!fetchRemoteConfig(remoteVersion, remoteCRC)) {
-        Serial.println("Failed to fetch remote config.");
+        SerialMon.println("Failed to fetch remote config.");
         return false;
     }
 
-    String localVersion = readEEPROMVersion();
-    Serial.printf("Local version: %s, Remote version: %s\n", localVersion.c_str(), remoteVersion.c_str());
+    String localVersion = "";//readEEPROMVersion();
+    SerialMon.printf("Local version: %s, Remote version: %s\n", localVersion.c_str(), remoteVersion.c_str());
 
     if (remoteVersion == "" || remoteVersion == localVersion) {
-        Serial.println("No update required.");
+        SerialMon.println("No update required.");
         return false;
     }
 
     if (!initSpiffs()) return false;
 
     if (!downloadFile(String(HTTP_SERVER) + "/" + FILE_NAME, LOCAL_FILE)) {
-        Serial.println("Failed to download firmware.");
+        SerialMon.println("Failed to download firmware.");
         return false;
     }
     
     uint32_t localCRC = calculateLocalCRC32(LOCAL_FILE);
 
-    Serial.printf("Remote CRC: %08X, Local CRC: %08X\n", remoteCRC, localCRC);
+    SerialMon.printf("Remote CRC: %08X, Local CRC: %08X\n", remoteCRC, localCRC);
 
     if (remoteCRC == 0 || remoteCRC != localCRC) {
-        Serial.println("CRC mismatch, aborting update.");
+        SerialMon.println("CRC mismatch, aborting update.");
         return false;
     }
 
@@ -181,30 +182,30 @@ bool WiFiUpdater::updateFirmware() {
 void WiFiUpdater::performFirmwareUpdate(String& newVersion) {
     File updateBin = SPIFFS.open(LOCAL_FILE);
     if (!updateBin) {
-        Serial.println("Failed to open firmware file.");
+        SerialMon.println("Failed to open firmware file.");
         return;
     }
 
     if (!Update.begin(updateBin.size())) {
-        Serial.println("Update.begin failed");
-        Update.printError(Serial);
+        SerialMon.println("Update.begin failed");
+        Update.printError(SerialMon);
         return;
     }
 
     size_t written = Update.writeStream(updateBin);
     if (written != updateBin.size()) {
-        Serial.println("Firmware write failed!");
-        Update.printError(Serial);
+        SerialMon.println("Firmware write failed!");
+        Update.printError(SerialMon);
         return;
     }
 
     if (!Update.end()) {
-        Serial.println("Update.end failed!");
-        Update.printError(Serial);
+        SerialMon.println("Update.end failed!");
+        Update.printError(SerialMon);
         return;
     }
     writeEEPROMVersion(newVersion);
-    Serial.println("Firmware update successful. Restarting...");
+    SerialMon.println("Firmware update successful. Restarting...");
     delay(1000);
     ESP.restart();
 }
