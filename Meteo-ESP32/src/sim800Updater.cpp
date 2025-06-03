@@ -9,6 +9,27 @@
 
 Sim800Updater::Sim800Updater(){}
 
+void Sim800Updater::begin() {    
+    for (int i = 0; i < 32; ++i) {
+        FTP_SERVER[i] = EEPROM.read(FTP_EEPROM_ADDR + i);
+        FTP_USER[i] = EEPROM.read(FTP_EEPROM_ADDR + 32 + i);
+        FTP_PASS[i] = EEPROM.read(FTP_EEPROM_ADDR + 64 + i);
+    }
+    FTP_SERVER[31] = '\0';
+    FTP_USER[31] = '\0';
+    FTP_PASS[31] = '\0';
+    
+    if (FTP_SERVER[0] == 0xFF || FTP_SERVER[0] == '\0' || FTP_USER == 0 || FTP_PASS[0] == '\0') {
+        SerialMon.println("EEPROM is empty, loading default FTP config");
+
+        strncpy(FTP_SERVER, FTP_SERVER_DEFAULT, sizeof(FTP_SERVER));        
+        strncpy(FTP_USER, FTP_USER_DEFAULT, sizeof(FTP_USER));
+        strncpy(FTP_PASS, FTP_PASS_DEFAULT, sizeof(FTP_PASS));        
+    }
+    else SerialMon.println("Loaded FTP config from EEPROM");
+    SerialMon.printf("FTP Server: %s, User: %s, Pass: %s\n", FTP_SERVER, FTP_USER, FTP_PASS);
+}
+
 void Sim800Updater::performFirmwareUpdate(String& newVersion) {
     SerialMon.println("Начало обновления прошивки...");
     File firmware = SPIFFS.open(LOCAL_FILE, FILE_READ);

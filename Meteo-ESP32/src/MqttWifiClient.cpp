@@ -1,38 +1,49 @@
 #include "MqttWifiClient.h"
-
-#define EEPROM_SIZE 256
-#define MQTT_EEPROM_START 122
-#define LED_PIN 2
+#include "deviceConfig.h"
 
 MqttWifiClient* MqttWifiClient::instance = nullptr;
 
-MqttWifiClient::MqttWifiClient(const char* ssid, const char* password)
-    : _ssid(ssid), _password(password), _mqttClient(_wifiClient) {
-    instance = this;
+MqttWifiClient::MqttWifiClient()
+    : _mqttClient(_wifiClient) {
+    instance = this;    
 }
 
-void MqttWifiClient::begin() {
-    EEPROM.begin(EEPROM_SIZE);
-    loadSettingsFromEEPROM();    
+void MqttWifiClient::begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId) {
+    strncpy(_mqttServer, broker, sizeof(_mqttServer) - 1);
+    _mqttServer[sizeof(_mqttServer) - 1] = '\0'; // Ensure null termination
+    _mqttPort = port;
+    strncpy(_mqttUser, user, sizeof(_mqttUser) - 1);
+    _mqttUser[sizeof(_mqttUser) - 1] = '\0'; // Ensure null termination
+    strncpy(_mqttPass, pass, sizeof(_mqttPass) - 1);
+    _mqttPass[sizeof(_mqttPass) - 1] = '\0'; // Ensure null termination
+    strncpy(_mqttClientId, clientId, sizeof(_mqttClientId) - 1);
+    _mqttClientId[sizeof(_mqttClientId) - 1] = '\0'; // Ensure null termination
+    SerialMon.printf("MQTT Server: %s, Port: %d, User: %s, Client ID: %s\n", 
+                _mqttServer, _mqttPort, _mqttUser, _mqttClientId);
     _mqttClient.setServer(_mqttServer, _mqttPort);
     _mqttClient.setCallback(mqttCallbackStatic);
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("WiFi not connected, skipping MQTT connection");
+        SerialMon.println("WiFi not connected, skipping MQTT connection");
         return;
     }
     connectToMqtt();
 }
 
 void MqttWifiClient::loop() {
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("WiFi disconnected, MQTT loop skipped");
+    if (WiFi.status() != WL_CONNECTED) {        
         return;
     }
 
-    if (!_mqttClient.connected()) {
-        connectToMqtt();
+    if (_mqttClient.connected()) {
+        _mqttClient.loop();
+    } else {
+        unsigned long now = millis();
+        if (now - _lastReconnectAttempt > _reconnectInterval) {
+            Serial.println("Attempting MQTT reconnect...");
+            _lastReconnectAttempt = now;
+            connectToMqtt();
+        }
     }
-    _mqttClient.loop();
 }
 
 bool MqttWifiClient::publish(const char* topic, const char* payload, bool retained) {
@@ -50,35 +61,48 @@ void MqttWifiClient::connectToMqtt() {
     const int maxAttempts = 5;
     int attempts = 0;
 
-    Serial.print("Connecting to MQTT");
+    SerialMon.print("Connecting to MQTT");
 
     while (!_mqttClient.connected() && attempts < maxAttempts) {
-        String clientId = "ESPClient-" + String(random(0xffff), HEX);
+        //String clientId = "ESPClient-" + String(random(0xffff), HEX);        
         bool connected;
 
         if (_mqttUser[0] != '\0' && _mqttPass[0] != '\0') {
-            connected = _mqttClient.connect(clientId.c_str(), _mqttUser, _mqttPass);
+            connected = _mqttClient.connect(_mqttClientId, _mqttUser, _mqttPass);
+            SerialMon.print(" with user: ");
+            SerialMon.print(_mqttUser);
         } else {
-            connected = _mqttClient.connect(clientId.c_str());
+            connected = _mqttClient.connect(_mqttClientId);
         }
 
         if (connected) {
-            Serial.println("\nConnected to MQTT broker");
+            SerialMon.println("\nConnected to MQTT broker");
+			if(mqttSubscribe(MQTT_CHANNEL_ID,ledFieldNum,SUBSCRIBE_TO_CHANNEL )==1 ){
+				SerialMon.println( " Subscribed " );
+			}
             return;
         } else {
-            Serial.print(".");
+            SerialMon.print(".");
             delay(1000);
             attempts++;
         }
     }
 
-    Serial.println("\nFailed to connect to MQTT broker.");
+    SerialMon.println("\nFailed to connect to MQTT broker.");
 }
 
-void MqttWifiClient::loadSettingsFromEEPROM() {
+/*void MqttWifiClient::loadSettingsFromEEPROM() {
     int addr = MQTT_EEPROM_START;
 
-    for (int i = 0; i < sizeof(_mqttServer) - 1; i++) {
+    bool isEmpty = true;
+    for (int i = 0; i < 10; ++i) {
+        if (EEPROM.read(MQTT_EEPROM_START + i) != 0xFF) {
+            isEmpty = false;
+            break;
+        }
+    }
+
+    for (int i = 0; i < sizeof(_mqttServer); i++) {
         _mqttServer[i] = EEPROM.read(addr++);
     }
     _mqttServer[sizeof(_mqttServer) - 1] = '\0';
@@ -86,21 +110,32 @@ void MqttWifiClient::loadSettingsFromEEPROM() {
     _mqttPort = EEPROM.read(addr++) << 8;
     _mqttPort |= EEPROM.read(addr++);
 
-    for (int i = 0; i < sizeof(_mqttUser) - 1; i++) {
+    for (int i = 0; i < sizeof(_mqttUser); i++) {
         _mqttUser[i] = EEPROM.read(addr++);
     }
     _mqttUser[sizeof(_mqttUser) - 1] = '\0';
 
-    for (int i = 0; i < sizeof(_mqttPass) - 1; i++) {
+    for (int i = 0; i < sizeof(_mqttPass); i++) {
         _mqttPass[i] = EEPROM.read(addr++);
     }
     _mqttPass[sizeof(_mqttPass) - 1] = '\0';
 
-    Serial.println("Loaded MQTT config from EEPROM:");
-    Serial.print("Server: "); Serial.println(_mqttServer);
-    Serial.print("Port: "); Serial.println(_mqttPort);
-    Serial.print("User: "); Serial.println(_mqttUser);
-}
+    for (int i = 0; i < sizeof(_mqttClientId); i++) {
+        _mqttClientId[i] = EEPROM.read(addr++);
+    }
+    _mqttClientId[sizeof(_mqttClientId) - 1] = '\0';
+
+    if (isEmpty || _mqttServer[0] == '\0' || _mqttPort == 0 || _mqttUser[0] == '\0' || _mqttPass[0] == '\0') {
+        SerialMon.println("EEPROM is empty, loading default MQTT config");
+
+        strncpy(_mqttServer, MQTT_BROKER, sizeof(_mqttServer));
+        _mqttPort = MQTT_PORT;
+        strncpy(_mqttUser, MQTT_USERNAME, sizeof(_mqttUser));
+        strncpy(_mqttPass, MQTT_PASSWORD, sizeof(_mqttPass));
+        strncpy(_mqttClientId, MQTT_CLIENT_ID, sizeof(_mqttClientId));
+    }
+    else SerialMon.println("Loaded MQTT config from EEPROM");    
+}*/
 
 void MqttWifiClient::mqttCallbackStatic(char* topic, byte* payload, unsigned int len) {
     if (instance != nullptr) {
@@ -109,23 +144,26 @@ void MqttWifiClient::mqttCallbackStatic(char* topic, byte* payload, unsigned int
 }
 
 void MqttWifiClient::handleMqttMessage(char* topic, byte* payload, unsigned int len) {
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print("]: ");
-    Serial.write(payload, len);
-    Serial.println();
+    SerialMon.print("Message arrived [");
+    SerialMon.print(topic);
+    SerialMon.print("]: ");
+    SerialMon.write(payload, len);
+    SerialMon.println();
 
     String expectedTopic = "channels/" + String(MQTT_CHANNEL_ID) + "/subscribe/fields/field" + String(ledFieldNum);
     if (String(topic) == expectedTopic) {
-        Serial.println("Received LED control message");
+        SerialMon.println("Received LED control message");
 
         char p[len + 1];
         memcpy(p, payload, len);
         p[len] = '\0';
-
+        SerialMon.print("Payload: ");
+        SerialMon.println(p);
         int ledStatus = atoi(p) > 0 ? HIGH : LOW;
+        SerialMon.print("Setting LED status to: ");
+        SerialMon.println(ledStatus);
         digitalWrite(LED_PIN, ledStatus);
-        dataToPublish[ledFieldNum - 1] = ledStatus * 10;
+        dataToPublish[ledFieldNum] = ledStatus * 10;
 
         mqttPublish(MQTT_CHANNEL_ID, dataToPublish, fieldsToPublish);
     }
@@ -143,8 +181,13 @@ void MqttWifiClient::mqttPublish(long pubChannelID, int dataArray[], int fieldAr
     }
 
     String topicString = "channels/" + String(pubChannelID) + "/publish";
-    Serial.println("Publishing: " + dataString);
-    _mqttClient.publish(topicString.c_str(), dataString.c_str());
+    SerialMon.println("Publishing to: " + topicString);
+    SerialMon.println("Publishing: " + dataString);
+    if(_mqttClient.publish(topicString.c_str(), dataString.c_str())) {
+        SerialMon.println("Published successfully to channel " + String(pubChannelID));
+    } else {
+        SerialMon.println("Failed to publish to channel " + String(pubChannelID));
+    }
 }
 
 int MqttWifiClient::mqttSubscribe(long subChannelID, int field, int unsubSub) {
@@ -156,7 +199,7 @@ int MqttWifiClient::mqttSubscribe(long subChannelID, int field, int unsubSub) {
         myTopic = "channels/" + String(subChannelID) + "/subscribe/fields/field" + String(field);
     }
 
-    Serial.println("Subscribing to: " + myTopic);
+    SerialMon.println("Subscribing to: " + myTopic);
     if (unsubSub == 1) {
         return _mqttClient.unsubscribe(myTopic.c_str());
     } else {

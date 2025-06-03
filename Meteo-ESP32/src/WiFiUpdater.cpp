@@ -1,7 +1,7 @@
 #include "WiFiUpdater.h"
 #include <EEPROM.h>
 #include <SPIFFS.h>
-#include "sim868Config.h"
+#include "deviceConfig.h"
 #include "ServerSettings.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -10,6 +10,21 @@
 #include <FS.h>
 
 WiFiUpdater::WiFiUpdater() {}
+
+void WiFiUpdater::begin() {
+    for (int i = 0; i < 64; ++i) {
+        HTTP_SERVER[i] = EEPROM.read(HTTP_SERVER_EEPROM_ADDR + i);        
+    }
+    HTTP_SERVER[63] = '\0';    
+    
+    if (HTTP_SERVER[0] == 0xFF || HTTP_SERVER[0] == '\0') {
+        SerialMon.println("EEPROM is empty, loading default HTTP config");
+
+        strncpy(HTTP_SERVER, HTTP_SERVER_DEFAULT, sizeof(HTTP_SERVER));
+    }
+    else SerialMon.println("Loaded HTTP config from EEPROM");
+    SerialMon.printf("HTTP Server: %s\n", HTTP_SERVER);
+}
 
 bool WiFiUpdater::initSpiffs() {    
     if (!SPIFFS.begin(true)) {

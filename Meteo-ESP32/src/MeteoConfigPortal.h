@@ -25,19 +25,7 @@ public:
     void begin(); // Запуск портала
     void loop();
     DataPriority getTransferPriority();
-private:
-    // EEPROM config
-    static const int EEPROM_SIZE = 512;    
-    static const int WIFI_SSID_ADDR = 10;
-    static const int WIFI_PASS_ADDR = 30;
-    static const int GPRS_APN_ADDR = 50;
-    static const int GPRS_USER_ADDR = 70;
-    static const int GPRS_PASS_ADDR = 90;
-    static const int TRANSFER_PRIORITY_ADDR  = 110;
-    //Added space for fw version 8 bytes
-    static const int DEVICE_ID_ADDR = 122;
-    static const int DEVICE_LIST_ADDR = 126;
-
+private:  
     AsyncWebServer server;
     std::vector<struct MeteoDevice> meteoDevices;
     int deviceId; 
@@ -69,7 +57,11 @@ private:
     void startAccessPoint();
     void saveGPRSSettings(String apn, String user, String pass);
     void loadGPRSSettings();    
-    void loadTransferPriority();    
+    void loadTransferPriority();
+    //void saveMQTTToEEPROM(const String& broker, uint16_t port, const String& user, const String& pass, const String& clientId);
+    //void loadMQTTFromEEPROM(char* broker, uint16_t& port, char* user, char* pass, char* clientId);
+    void saveMQTTToEEPROM(const String& broker, uint16_t port, const String& user, const String& pass, const String& clientId);
+    void loadMQTTFromEEPROM(char* broker, uint16_t& port, char* user, char* pass, char* clientId);
 
     void handleRoot();
     void handleSetDeviceId();
@@ -84,6 +76,12 @@ private:
     void handleReboot();  
     void handleGetTransferPriority();
     void handleSetTransferPriority();
-};;
+    void handleGetMQTT();
+    void handleSetMQTT();
+    void handleGetFTP();
+    void handleSetFTP();
+    void handleGetHttpServer();
+    void handleSetHttpServer();
+};
 
 #endif

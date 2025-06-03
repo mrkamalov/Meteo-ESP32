@@ -102,13 +102,13 @@ int Sim868Client::mqttSubscribe( long subChannelID, int field, int unsubSub ){
 
 boolean Sim868Client::mqttConnect() {
   SerialMon.print("Connecting to ");
-  SerialMon.print(MQTT_BROKER);
+  SerialMon.print(_mqttServer);
 
   // Connect to MQTT Broker
   //boolean status = mqtt.connect("GsmClientTest");
 
   // Or, if you want to authenticate MQTT:
-  boolean status = _mqttClient->connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD);
+  boolean status = _mqttClient->connect(_mqttClientId, _mqttUser, _mqttPass);
 
   if (status == false) {
     SerialMon.println(" fail");
@@ -122,14 +122,26 @@ boolean Sim868Client::mqttConnect() {
 }
 
 
-void Sim868Client::begin() {
+void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId) {
   // Включение питания модема
   pinMode(MODEM_POWER_PIN, OUTPUT);
   digitalWrite(MODEM_POWER_PIN, HIGH);  
   delay(10);
+  
+  strncpy(_mqttServer, broker, sizeof(_mqttServer) - 1);
+  _mqttServer[sizeof(_mqttServer) - 1] = '\0'; // Ensure null termination
+  _mqttPort = port;
+  strncpy(_mqttUser, user, sizeof(_mqttUser) - 1);
+  _mqttUser[sizeof(_mqttUser) - 1] = '\0'; // Ensure null termination
+  strncpy(_mqttPass, pass, sizeof(_mqttPass) - 1);
+  _mqttPass[sizeof(_mqttPass) - 1] = '\0'; // Ensure null termination
+  strncpy(_mqttClientId, clientId, sizeof(_mqttClientId) - 1);
+  _mqttClientId[sizeof(_mqttClientId) - 1] = '\0'; // Ensure null termination
+  SerialMon.printf("MQTT Server: %s, Port: %d, User: %s, Client ID: %s\n", 
+              _mqttServer, _mqttPort, _mqttUser, _mqttClientId);
 
   pinMode(LED_PIN, OUTPUT);
-  SerialMon.println("Wait...");  
+  SerialMon.println("Wait...");
   delay(6000);
 
   // Restart takes quite some time
@@ -168,7 +180,7 @@ void Sim868Client::begin() {
   if (_gsmModem->isGprsConnected()) { SerialMon.println("GPRS connected"); }
 
   // MQTT Broker setup
-  _mqttClient->setServer(MQTT_BROKER, MQTT_PORT);
+  _mqttClient->setServer(_mqttServer, _mqttPort);
   _mqttClient->setCallback(mqttCallbackStatic);
 
   // Проверка связи

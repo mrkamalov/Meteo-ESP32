@@ -1,8 +1,6 @@
 #include <HardwareSerial.h>
 #include "TransmissionManager.h"
 
-#define MODEM_RX 18
-#define MODEM_TX 17
 static TransmissionManager transmissionManager;
 
 void setup() {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "sim868Config.h"
+#include "deviceConfig.h"
 #include <TinyGsmClient.h>
 #include <PubSubClient.h>
 
@@ -11,7 +11,7 @@ class Sim868Client {
 public:
   Sim868Client(TinyGsm* modem, TinyGsmClient* client, PubSubClient*  mqtt);
 
-  void begin();
+  void begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId);
   void loop();
   bool isModemConnected();
 
@@ -27,6 +27,12 @@ private:
     TinyGsm* _gsmModem;
     TinyGsmClient* _gsmClient;
     PubSubClient* _mqttClient;
+
+    char _mqttServer[64] = {0};
+    uint16_t _mqttPort = 1883;
+    char _mqttUser[32] = {0};
+    char _mqttPass[32] = {0};
+    char _mqttClientId[32] = {0};
 
     int ledStatus = LOW;
     int ledFieldNum = 1;

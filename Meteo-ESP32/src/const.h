@@ -7,11 +7,6 @@ const int  port     = 443;//80;
 const char resource[]    = "/Meteo-ESP32/firmware/firmware_part";
 const char configAddress[] = "/Meteo-ESP32/firmware/config.txt";
 
-// Определите пины для подключения модема
-#define MODEM_RX 18
-#define MODEM_TX 17
-#define MODEM_POWER_PIN 8
-
 /*
 Modem test commands
 AT

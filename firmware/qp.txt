@@ -16,7 +16,7 @@ ip 66.220.9.50 (ftp.drivehq.com)
 port 21 (FTP/SSL)
 
 VMS-Ecoftp
-172.30.56.14 admin1 1S-WqimX
+172.30.56.14 admin1 1S-WqimX	ssh admin1@172.30.56.14
 login meteoesp
 pass mD7t_i@J?J8}
 
@@ -25,7 +25,6 @@ VMS-Ecomqqt
 login
 pass 
 
-
-ftpcouch.couchdrop.io
-login couchuser
-password lqKJ4MAUy8g0g06IB8rn
+ftps://couchuser3@ftpcouchdrop.couchdrop.io
+login couchuser3
+password z55RTVzgsps4P8q

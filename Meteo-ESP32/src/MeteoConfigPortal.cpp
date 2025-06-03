@@ -1,7 +1,7 @@
 #include "MeteoConfigPortal.h"
 #include <EEPROM.h>
 #include <ESPmDNS.h>
-#include "sim868Config.h"
+#include "deviceConfig.h"
 
 // ==== Конструктор ====
 MeteoConfigPortal::MeteoConfigPortal() : server(80) {}
@@ -220,6 +220,75 @@ DataPriority MeteoConfigPortal::getTransferPriority() {
     return transferPriority;
 }
 
+void MeteoConfigPortal::saveMQTTToEEPROM(const String& broker, uint16_t port, const String& user, const String& pass, const String& clientId) {
+    int addr = MQTT_EEPROM_START;
+
+    // Broker (макс 64 байта)
+    for (int i = 0; i < 64; ++i) {
+        char c = i < broker.length() ? broker[i] : 0;
+        EEPROM.write(addr++, c);
+    }
+    
+    // Port (2 байта)
+    EEPROM.write(addr++, (port >> 8) & 0xFF);  // старший байт
+    EEPROM.write(addr++, port & 0xFF);         // младший байт
+
+    // Username (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        char c = i < user.length() ? user[i] : 0;
+        EEPROM.write(addr++, c);
+    }
+
+    // Password (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        char c = i < pass.length() ? pass[i] : 0;
+        EEPROM.write(addr++, c);
+    }
+
+    // Client ID (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        char c = i < clientId.length() ? clientId[i] : 0;
+        EEPROM.write(addr++, c);
+    }
+
+    EEPROM.commit(); 
+    SerialMon.println("MQTT settings saved to EEPROM:");
+    SerialMon.printf("Broker: %s, Port: %d, User: %s, Pass: %s, Client ID: %s\n", 
+        broker.c_str(), port, user.c_str(), pass.c_str(), clientId.c_str()); 
+}
+
+void MeteoConfigPortal::loadMQTTFromEEPROM(char* broker, uint16_t& port, char* user, char* pass, char* clientId) {
+    int addr = MQTT_EEPROM_START;
+
+    // Broker (макс 64 байта)
+    for (int i = 0; i < 64; ++i) {
+        broker[i] = EEPROM.read(addr++);
+    }
+    broker[63] = '\0';
+
+    // Port (2 байта)
+    port = EEPROM.read(addr++) << 8;
+    port |= EEPROM.read(addr++);
+
+    // Username (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        user[i] = EEPROM.read(addr++);
+    }
+    user[31] = '\0';
+
+    // Password (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        pass[i] = EEPROM.read(addr++);
+    }
+    pass[31] = '\0';
+
+    // Client ID (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        clientId[i] = EEPROM.read(addr++);
+    }
+    clientId[31] = '\0';
+}
+
 // ==== Встроенный HTML-фронтенд ====
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -249,7 +318,7 @@ const char index_html[] PROGMEM = R"rawliteral(
 
             let priorityResponse = await fetch("/getPriority");
             let priority = await priorityResponse.text();
-            document.getElementById("priority").value = priority;
+            document.getElementById("priority").value = priority;            
         }
 
         async function addDevice() {
@@ -299,7 +368,58 @@ const char index_html[] PROGMEM = R"rawliteral(
         async function reboot() {
             await fetch("/reboot");
         }
-        window.onload = loadDevices;
+        async function saveMQTT() {
+            let broker = encodeURIComponent(document.getElementById("mqttBroker").value);
+            let port = document.getElementById("mqttPort").value;
+            let user = encodeURIComponent(document.getElementById("mqttUser").value);
+            let pass = encodeURIComponent(document.getElementById("mqttPass").value);
+            let clientId = encodeURIComponent(document.getElementById("mqttClientId").value);
+
+            await fetch(`/setMQTT?broker=${broker}&port=${port}&user=${user}&pass=${pass}&clientId=${clientId}`);
+        }
+
+        async function loadMQTT() {
+            const response = await fetch("/getMQTT");
+            const mqtt = await response.json();
+            document.getElementById("mqttBroker").value = mqtt.broker;
+            document.getElementById("mqttPort").value = mqtt.port;
+            document.getElementById("mqttUser").value = mqtt.user;
+            document.getElementById("mqttPass").value = mqtt.pass;
+            document.getElementById("mqttClientId").value = mqtt.clientId;
+        }
+
+        async function loadFTP() {
+            let ftpResponse = await fetch("/getFTP");
+            let ftp = await ftpResponse.json();
+            document.getElementById("ftpServer").value = ftp.server;
+            document.getElementById("ftpUser").value = ftp.user;
+            document.getElementById("ftpPass").value = ftp.pass;
+        }
+
+        async function saveFTP() {
+            let server = encodeURIComponent(document.getElementById("ftpServer").value);
+            let user = encodeURIComponent(document.getElementById("ftpUser").value);
+            let pass = encodeURIComponent(document.getElementById("ftpPass").value);
+            await fetch(`/setFTP?server=${server}&user=${user}&pass=${pass}`);
+        }
+
+        async function loadHttpServer() {
+            let response = await fetch("/getHttpServer");
+            let server = await response.text();
+            document.getElementById("httpServer").value = server;
+        }
+
+        async function saveHttpServer() {
+            let server = encodeURIComponent(document.getElementById("httpServer").value);
+            await fetch(`/setHttpServer?server=${server}`);
+        }
+
+        window.onload = function () {
+            loadDevices();
+            loadMQTT();
+            loadFTP();
+            loadHttpServer();
+        };
     </script>
 </head>
 <body>
@@ -337,6 +457,34 @@ const char index_html[] PROGMEM = R"rawliteral(
         <option value="2">WiFi first, then GPRS</option>
     </select>
     <button onclick="savePriority()">Save Priority</button>
+    <br><br>
+    <h3>MQTT Settings</h3>
+    <label for="mqttBroker">MQTT Broker:</label>
+    <input id="mqttBroker" placeholder="Broker">
+    <label for="mqttPort">MQTT Port:</label>
+    <input id="mqttPort" type="number" placeholder="Port">
+    <br><br>
+    <label for="mqttUser">MQTT Username:</label>
+    <input id="mqttUser" placeholder="Username">
+    <label for="mqttClientId">MQTT Client ID:</label>
+    <input id="mqttClientId" placeholder="Client ID">
+    <label for="mqttPass">MQTT Password:</label>
+    <input id="mqttPass" placeholder="Password">    
+    <button onclick="saveMQTT()">Save MQTT settings</button>
+    <br><br>
+    <h3>FTP Settings</h3>
+    <label for="ftpServer">FTP Server:</label>
+    <input id="ftpServer" placeholder="FTP Server">
+    <label for="ftpUser">FTP User:</label>
+    <input id="ftpUser" placeholder="FTP User">
+    <label for="ftpPass">FTP Password:</label>
+    <input id="ftpPass" placeholder="FTP Password">
+    <button onclick="saveFTP()">Save FTP</button>
+    <br><br>
+    <h3>HTTP Server</h3>
+    <label for="httpServer">HTTP Server URL:</label>
+    <input id="httpServer" placeholder="https://example.com/firmware">
+    <button onclick="saveHttpServer()">Save HTTP Server</button>
     <br><br>
     <button onclick="goToUpdate()">Update Firmware</button>
     <br><br>
@@ -497,6 +645,121 @@ void MeteoConfigPortal::handleSetTransferPriority() {
     });
 }
 
+void MeteoConfigPortal::handleGetMQTT() {
+    server.on("/getMQTT", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        char broker[64], user[32], pass[32], clientId[32];
+        uint16_t port;
+        loadMQTTFromEEPROM(broker, port, user, pass, clientId);
+        String response = "{";
+        response += "\"broker\":\"" + String(broker) + "\",";
+        response += "\"port\":" + String(port) + ",";
+        response += "\"user\":\"" + String(user) + "\",";
+        response += "\"pass\":\"" + String(pass) + "\",";
+        response += "\"clientId\":\"" + String(clientId) + "\"";
+        response += "}";
+        request->send(200, "application/json", response);
+    });
+}
+
+void MeteoConfigPortal::handleSetMQTT() {
+    server.on("/setMQTT", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("broker") && request->hasParam("port") &&
+            request->hasParam("user") && request->hasParam("pass") &&
+            request->hasParam("clientId")) {
+            
+            String broker = request->getParam("broker")->value();
+            uint16_t port = request->getParam("port")->value().toInt();
+            String user = request->getParam("user")->value();
+            String pass = request->getParam("pass")->value();
+            String clientId = request->getParam("clientId")->value();
+            saveMQTTToEEPROM(broker, port, user, pass, clientId);
+            request->send(200, "text/plain", "MQTT settings saved");
+            delay(1000);
+            ESP.restart();
+        } else {
+            request->send(400, "text/plain", "Missing parameters");
+        }
+    });
+}
+
+void MeteoConfigPortal::handleGetFTP() {
+    server.on("/getFTP", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        char ftpServer[32], ftpUser[32], ftpPass[32];
+        int addr = FTP_EEPROM_ADDR;
+
+        for (int i = 0; i < sizeof(ftpServer); i++) ftpServer[i] = EEPROM.read(addr++);
+        ftpServer[31] = '\0';  // Завершающий нуль-символ
+        for (int i = 0; i < sizeof(ftpUser); i++) ftpUser[i] = EEPROM.read(addr++);
+        ftpUser[31] = '\0';  // Завершающий нуль-символ
+        for (int i = 0; i < sizeof(ftpPass); i++) ftpPass[i] = EEPROM.read(addr++);
+        ftpPass[31] = '\0';  // Завершающий нуль-символ
+
+        String json = "{";
+        json += "\"server\":\"" + String(ftpServer) + "\",";
+        json += "\"user\":\"" + String(ftpUser) + "\",";
+        json += "\"pass\":\"" + String(ftpPass) + "\"";
+        json += "}";
+
+        request->send(200, "application/json", json);
+    });
+}
+
+void MeteoConfigPortal::handleSetFTP() {
+    server.on("/setFTP", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("server") && request->hasParam("user") && request->hasParam("pass")) {
+            String serverVal = request->getParam("server")->value();
+            String userVal = request->getParam("user")->value();
+            String passVal = request->getParam("pass")->value();
+
+            int addr = FTP_EEPROM_ADDR;
+
+            for (int i = 0; i < 32; i++)
+                EEPROM.write(addr++, i < serverVal.length() ? serverVal[i] : 0);
+            for (int i = 0; i < 32; i++)
+                EEPROM.write(addr++, i < userVal.length() ? userVal[i] : 0);
+            for (int i = 0; i < 32; i++)
+                EEPROM.write(addr++, i < passVal.length() ? passVal[i] : 0);
+
+            EEPROM.commit();
+            request->send(200, "text/plain", "FTP settings saved");
+        } else {
+            request->send(400, "text/plain", "Missing parameters");
+        }
+    });
+}
+
+void MeteoConfigPortal::handleGetHttpServer() {
+    server.on("/getHttpServer", HTTP_GET, [](AsyncWebServerRequest *request) {
+        char server[64];
+        int addr = HTTP_SERVER_EEPROM_ADDR;
+
+        for (int i = 0; i < 64; i++) {
+            server[i] = EEPROM.read(addr++);
+        }
+        server[63] = '\0';
+
+        request->send(200, "text/plain", String(server));
+    });
+}
+
+void MeteoConfigPortal::handleSetHttpServer() {
+    server.on("/setHttpServer", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (request->hasParam("server")) {
+            String serverVal = request->getParam("server")->value();
+            int addr = HTTP_SERVER_EEPROM_ADDR;
+
+            for (int i = 0; i < 64; i++) {
+                EEPROM.write(addr++, i < serverVal.length() ? serverVal[i] : 0);
+            }
+            EEPROM.commit();
+
+            request->send(200, "text/plain", "HTTP Server saved");
+        } else {
+            request->send(400, "text/plain", "Missing 'server' parameter");
+        }
+    });
+}
+
 // ==== Настройка веб-сервера ====
 void MeteoConfigPortal::setupWebServer() {
     handleRoot();
@@ -515,5 +778,14 @@ void MeteoConfigPortal::setupWebServer() {
     handleReboot();
 
     handleGetTransferPriority();
-    handleSetTransferPriority();    
+    handleSetTransferPriority();
+
+    handleGetMQTT();
+    handleSetMQTT();
+
+    handleGetFTP();
+    handleSetFTP();
+
+    handleGetHttpServer();
+    handleSetHttpServer();
 }

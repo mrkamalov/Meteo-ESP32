@@ -1,0 +1,49 @@
+#pragma once
+
+#define MODEM_RX 18
+#define MODEM_TX 17
+#define MODEM_POWER_PIN 8
+// Select your modem:
+#define TINY_GSM_MODEM_SIM800
+// Set serial for debug console (to the Serial Monitor, default speed 115200)
+#define SerialMon Serial
+#define SerialAT Serial1
+// Define the serial console for debug prints, if needed
+#define TINY_GSM_DEBUG SerialMon
+// set GSM PIN, if any
+#define GSM_PIN ""
+#define LED_PIN 39
+// GPRS
+#define APN         "internet.altel.kz"
+#define GPRS_USER   ""
+#define GPRS_PASS   ""
+// MQTT
+#define MQTT_USERNAME "CjQvGwkeDxwLOC8FKCMcACA"
+#define MQTT_CLIENT_ID "CjQvGwkeDxwLOC8FKCMcACA"
+#define MQTT_PASSWORD "VUgJOQcuoIl+A4OQXmr4Gs01"
+#define MQTT_BROKER   "mqtt3.thingspeak.com"
+#define MQTT_PORT     1883
+#define MQTT_CHANNEL_ID 2385945
+#define SUBSCRIBE_TO_CHANNEL 0
+
+// Настройки FTP сервера
+#define FTP_SERVER_DEFAULT "ftpcouch.couchdrop.io"
+#define FTP_USER_DEFAULT "couchuser"
+#define FTP_PASS_DEFAULT "lqKJ4MAUy8g0g06IB8rn"
+
+#define HTTP_SERVER_DEFAULT "https://mrkamalov.github.io/Meteo-ESP32/firmware" //"172.30.56.14";
+
+constexpr int EEPROM_SIZE = 1024;    
+constexpr int WIFI_SSID_ADDR = 10;
+constexpr int WIFI_PASS_ADDR = 30;
+constexpr int GPRS_APN_ADDR = 50;
+constexpr int GPRS_USER_ADDR = 70;
+constexpr int GPRS_PASS_ADDR = 90;
+constexpr int TRANSFER_PRIORITY_ADDR  = 110;
+constexpr int FW_VERSION_ADDR  = 114;
+constexpr int FW_VERSION_SIZE = 8;
+constexpr int MQTT_EEPROM_START = 122;
+constexpr int FTP_EEPROM_ADDR = 284;
+constexpr int HTTP_SERVER_EEPROM_ADDR = 380;
+constexpr int DEVICE_ID_ADDR = 444;
+constexpr int DEVICE_LIST_ADDR = 448;
