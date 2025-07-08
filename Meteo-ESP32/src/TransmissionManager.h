@@ -8,6 +8,7 @@
 #include "WiFiUpdater.h"
 #include "ServerSettings.h"
 #include "MqttWifiClient.h"
+#include "ModbusSensor.h"
 
 class TransmissionManager {
 public:
@@ -34,6 +35,11 @@ private:
     uint16_t _mqttPort;
     char _mqttUser[32];
     char _mqttPass[32];
-    char _mqttClientId[32];
+    char _mqttClientId[32];    
+    ModbusSensor meteosensor;
+    SensorData sensorData;
+    
     void loadSettingsFromEEPROM();
+    String getSensorDataJson();
+    bool readSensorData(void);
 };

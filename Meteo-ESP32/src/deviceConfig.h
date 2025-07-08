@@ -12,7 +12,7 @@
 #define TINY_GSM_DEBUG SerialMon
 // set GSM PIN, if any
 #define GSM_PIN ""
-#define LED_PIN 39
+#define LED_PIN 1
 // GPRS
 #define APN         "internet.altel.kz"
 #define GPRS_USER   ""
@@ -32,6 +32,24 @@
 #define FTP_PASS_DEFAULT "lqKJ4MAUy8g0g06IB8rn"
 
 #define HTTP_SERVER_DEFAULT "https://mrkamalov.github.io/Meteo-ESP32/firmware" //"172.30.56.14";
+
+// ==== Аппаратные настройки Modbus ====
+#define MODBUS_BAUDRATE   9600
+#define MODBUS_RX_PIN     41
+#define MODBUS_TX_PIN     42
+#define MODBUS_REDE_PIN   39
+
+struct SensorData {
+    float gas1;
+    float gas2;
+    float gas3;
+    float gas4;
+    float internalTemp;
+    float pm25;
+    float pm10;
+    float externalTemp;
+    float humidity;
+};
 
 constexpr int EEPROM_SIZE = 1024;    
 constexpr int WIFI_SSID_ADDR = 10;

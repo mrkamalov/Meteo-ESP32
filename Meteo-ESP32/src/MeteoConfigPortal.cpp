@@ -6,7 +6,7 @@
 // ==== Конструктор ====
 MeteoConfigPortal::MeteoConfigPortal() : server(80) {}
 
-#define CLEAR_EEPROM false  // Поставь true для очистки EEPROM при старте
+#define CLEAR_EEPROM true  // Поставь true для очистки EEPROM при старте
 
 // ==== Функция запуска ====
 void MeteoConfigPortal::begin() {
@@ -39,7 +39,8 @@ void MeteoConfigPortal::begin() {
     server.begin();
 }
 
-void MeteoConfigPortal::loop() {
+void MeteoConfigPortal::loop(const String& sensorJson) {
+    _cachedSensorJson = sensorJson;
     if (WiFi.status() == WL_CONNECTED) {
         if (apActive) {
             WiFi.softAPdisconnect(true);
@@ -486,9 +487,56 @@ const char index_html[] PROGMEM = R"rawliteral(
     <input id="httpServer" placeholder="https://example.com/firmware">
     <button onclick="saveHttpServer()">Save HTTP Server</button>
     <br><br>
+    <button onclick="location.href='/sensor'">Sensor Values</button>
+    <br><br>
     <button onclick="goToUpdate()">Update Firmware</button>
     <br><br>
     <button onclick="reboot()">Reboot Device</button>
+</body>
+</html>
+)rawliteral";
+
+const char sensor_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Sensor Data</title>
+    <script>
+        async function fetchSensorData() {
+            try {
+                let res = await fetch("/getSensorData");
+                let data = await res.json();
+                let table = "";
+
+                for (const [key, value] of Object.entries(data)) {
+                    table += `<tr><td>${key}</td><td>${value.toFixed(2)}</td></tr>`;
+                }
+
+                document.getElementById("data").innerHTML = table;
+            } catch (e) {
+                document.getElementById("data").innerHTML = "<tr><td colspan='2'>Ошибка загрузки</td></tr>";
+            }
+        }
+
+        setInterval(fetchSensorData, 3000);
+        window.onload = fetchSensorData;
+    </script>
+</head>
+<body>
+    <h2>Sensor Readings</h2>
+    <table border="1" cellpadding="5">
+        <thead>
+            <tr>
+                <th>Параметр</th>
+                <th>Значение</th>
+            </tr>
+        </thead>
+        <tbody id="data">
+        </tbody>
+    </table>
+    <br>
+    <button onclick="location.href='/'">Back</button>
 </body>
 </html>
 )rawliteral";
@@ -760,6 +808,22 @@ void MeteoConfigPortal::handleSetHttpServer() {
     });
 }
 
+void MeteoConfigPortal::handleGetSensorData() {
+    server.on("/getSensorData", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (_cachedSensorJson.isEmpty()) {
+            request->send(500, "application/json", "{\"error\":\"No data\"}");
+        } else {
+            request->send(200, "application/json", _cachedSensorJson);
+        }
+    });
+}
+
+void MeteoConfigPortal::handleSensor() {
+    server.on("/sensor", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send_P(200, "text/html", sensor_html);
+    });
+}
+
 // ==== Настройка веб-сервера ====
 void MeteoConfigPortal::setupWebServer() {
     handleRoot();
@@ -788,4 +852,6 @@ void MeteoConfigPortal::setupWebServer() {
 
     handleGetHttpServer();
     handleSetHttpServer();
+    handleGetSensorData();
+    handleSensor();
 }

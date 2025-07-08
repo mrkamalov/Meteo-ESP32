@@ -23,7 +23,7 @@ class MeteoConfigPortal {
 public:
     MeteoConfigPortal();
     void begin(); // Запуск портала
-    void loop();
+    void loop(const String& sensorJson);
     DataPriority getTransferPriority();
 private:  
     AsyncWebServer server;
@@ -43,6 +43,7 @@ private:
     String gprsUser = "";
     String gprsPass = "";
     DataPriority transferPriority;
+    String _cachedSensorJson; 
 
     void setupWebServer();
     String getMeteoDevicesList();
@@ -82,6 +83,8 @@ private:
     void handleSetFTP();
     void handleGetHttpServer();
     void handleSetHttpServer();
+    void handleGetSensorData();
+    void handleSensor();
 };
 
 #endif

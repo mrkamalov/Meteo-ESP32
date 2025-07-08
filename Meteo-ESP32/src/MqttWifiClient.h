@@ -2,17 +2,18 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <EEPROM.h>
+#include "deviceConfig.h"
 
 class MqttWifiClient {
 public:
     MqttWifiClient();
 
     void begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId);
-    void loop();
+    void loop(const SensorData& sensorData, bool publishSensorData);
     bool publish(const char* topic, const char* payload, bool retained = false);
     bool isConnected();
 
-    void mqttPublish(long pubChannelID, int dataArray[], int fieldArray[]);
+    void mqttPublish(long pubChannelID, float dataArray[], int fieldArray[]);
     int mqttSubscribe(long subChannelID, int field = 0, int unsubSub = 0);
 
     static void mqttCallbackStatic(char* topic, byte* payload, unsigned int len);
@@ -38,6 +39,6 @@ private:
     const unsigned long _reconnectInterval = 10000; // 10 секунд
     int ledStatus = LOW;
     int ledFieldNum = 1;    
-    int fieldsToPublish[8]={0,1,0,0,0,0,0,0};             // Change to allow multiple fields.
-    int dataToPublish[8] = {0,0,0,0,0,0,0,0};
+    int fieldsToPublish[8]={1,1,1,1,1,1,1,1};             // Change to allow multiple fields.
+    float dataToPublish[8] = {0,0,0,0,0,0,0,0};
 };

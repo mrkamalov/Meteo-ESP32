@@ -6,7 +6,8 @@
 TransmissionManager::TransmissionManager()
     : _modem(SerialAT),
       _mqttClient(_modem),      
-      _mqtt(_mqttClient)      
+      _mqtt(_mqttClient),
+      meteosensor(1)
 {    
     simClient = new Sim868Client(&_modem, &_mqttClient, &_mqtt);
 }
@@ -26,6 +27,7 @@ void TransmissionManager::begin() {
     if (lastPriority == PRIORITY_WIFI_ONLY || lastPriority == PRIORITY_WIFI_THEN_GPRS) {
         mqttWifiClient.begin(_mqttServer, _mqttPort, _mqttUser, _mqttPass, _mqttClientId);
     }
+    meteosensor.begin();
 }
 
 void TransmissionManager::loop() {
@@ -37,8 +39,10 @@ void TransmissionManager::loop() {
         // (Опционально) Реинициализация компонентов при изменении приоритета
     }
 
-    // WiFi используется в любом случае для конфигурации
-    meteoPortal.loop();
+    bool receiveSensorData = readSensorData(); // Чтение данных датчика
+    String sensorJson = getSensorDataJson();
+    meteoPortal.loop(sensorJson);
+
     if((millis() - lastUpdateCheck) > UPDATE_CHECK_INTERVAL_MS) {
         updateTimeoutPassed = true;
         lastUpdateCheck = millis();
@@ -49,7 +53,7 @@ void TransmissionManager::loop() {
     }
     switch (currentPriority) {
         case PRIORITY_WIFI_ONLY:
-            mqttWifiClient.loop(); // Обработка MQTT сообщений
+            mqttWifiClient.loop(sensorData, false); ///receiveSensorData); // Обработка MQTT сообщений mytest TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
             if(WiFi.status() == WL_CONNECTED && updateTimeoutPassed) {
                 // Если WiFi подключен, то проверяем обновления
                 wifiUpdater.updateFirmware();
@@ -68,7 +72,7 @@ void TransmissionManager::loop() {
 
         case PRIORITY_WIFI_THEN_GPRS:
             if(WiFi.status() == WL_CONNECTED){
-                mqttWifiClient.loop(); // Обработка MQTT сообщений
+                mqttWifiClient.loop(sensorData, receiveSensorData); // Обработка MQTT сообщений
                 if(updateTimeoutPassed) {
                     // Если WiFi подключен, то проверяем обновления
                     wifiUpdater.updateFirmware();
@@ -85,6 +89,24 @@ void TransmissionManager::loop() {
             }
             break;
     }
+    
+}
+
+bool TransmissionManager::readSensorData() {
+    static unsigned long lastPollTime = 0;
+
+    if ((millis() - lastPollTime) >= 2000) { // Таймаут опроса 2 секунды
+        lastPollTime = millis();        
+        
+        if (meteosensor.readSensorData(sensorData, false)) {
+            SerialMon.printf("Gas1: %.2f ppm, PM2.5: %.2f µg/m³, Humidity: %.1f%%\n",
+                        sensorData.gas1, sensorData.pm25, sensorData.humidity);
+            return true; // Данные успешно считаны
+        } else {
+            SerialMon.println("Ошибка чтения данных от Modbus-датчика");
+        }
+    }
+    return false; // Данные не считаны
 }
 
 void TransmissionManager::loadSettingsFromEEPROM() {
@@ -132,4 +154,22 @@ void TransmissionManager::loadSettingsFromEEPROM() {
         strncpy(_mqttClientId, MQTT_CLIENT_ID, sizeof(_mqttClientId));
     }
     else SerialMon.println("Loaded MQTT config from EEPROM");    
+}
+
+String TransmissionManager::getSensorDataJson() {
+    const SensorData& d = sensorData;
+
+    String json = "{";
+    json += "\"gas1\":" + String(d.gas1, 2) + ",";
+    json += "\"gas2\":" + String(d.gas2, 2) + ",";
+    json += "\"gas3\":" + String(d.gas3, 2) + ",";
+    json += "\"gas4\":" + String(d.gas4, 2) + ",";
+    json += "\"internalTemp\":" + String(d.internalTemp, 2) + ",";
+    json += "\"pm25\":" + String(d.pm25, 2) + ",";
+    json += "\"pm10\":" + String(d.pm10, 2) + ",";
+    json += "\"externalTemp\":" + String(d.externalTemp, 2) + ",";
+    json += "\"humidity\":" + String(d.humidity, 2);
+    json += "}";
+
+    return json;
 }

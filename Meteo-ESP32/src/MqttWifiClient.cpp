@@ -29,13 +29,24 @@ void MqttWifiClient::begin(char* broker, uint16_t& port, char* user, char* pass,
     connectToMqtt();
 }
 
-void MqttWifiClient::loop() {
+void MqttWifiClient::loop(const SensorData& sensorData, bool publishSensorData) {    
     if (WiFi.status() != WL_CONNECTED) {        
         return;
     }
 
     if (_mqttClient.connected()) {
         _mqttClient.loop();
+        if (publishSensorData) {
+            dataToPublish[0] = sensorData.gas1;
+            dataToPublish[1] = sensorData.gas2;
+            dataToPublish[2] = sensorData.gas3;
+            dataToPublish[3] = sensorData.gas4;
+            dataToPublish[4] = sensorData.pm25;
+            dataToPublish[5] = sensorData.externalTemp;
+            dataToPublish[6] = sensorData.humidity;
+            dataToPublish[7] = millis() / 1000.0; // Current time in seconds
+            mqttPublish(MQTT_CHANNEL_ID, dataToPublish, fieldsToPublish);
+        }        
     } else {
         unsigned long now = millis();
         if (now - _lastReconnectAttempt > _reconnectInterval) {
@@ -149,27 +160,9 @@ void MqttWifiClient::handleMqttMessage(char* topic, byte* payload, unsigned int 
     SerialMon.print("]: ");
     SerialMon.write(payload, len);
     SerialMon.println();
-
-    String expectedTopic = "channels/" + String(MQTT_CHANNEL_ID) + "/subscribe/fields/field" + String(ledFieldNum);
-    if (String(topic) == expectedTopic) {
-        SerialMon.println("Received LED control message");
-
-        char p[len + 1];
-        memcpy(p, payload, len);
-        p[len] = '\0';
-        SerialMon.print("Payload: ");
-        SerialMon.println(p);
-        int ledStatus = atoi(p) > 0 ? HIGH : LOW;
-        SerialMon.print("Setting LED status to: ");
-        SerialMon.println(ledStatus);
-        digitalWrite(LED_PIN, ledStatus);
-        dataToPublish[ledFieldNum] = ledStatus * 10;
-
-        mqttPublish(MQTT_CHANNEL_ID, dataToPublish, fieldsToPublish);
-    }
 }
 
-void MqttWifiClient::mqttPublish(long pubChannelID, int dataArray[], int fieldArray[]) {
+void MqttWifiClient::mqttPublish(long pubChannelID, float dataArray[], int fieldArray[]) {
     int index = 0;
     String dataString = "";
 
