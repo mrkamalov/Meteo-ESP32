@@ -6,7 +6,7 @@
 // ==== Конструктор ====
 MeteoConfigPortal::MeteoConfigPortal() : server(80) {}
 
-#define CLEAR_EEPROM true  // Поставь true для очистки EEPROM при старте
+#define CLEAR_EEPROM false  // Поставь true для очистки EEPROM при старте
 
 // ==== Функция запуска ====
 void MeteoConfigPortal::begin() {
