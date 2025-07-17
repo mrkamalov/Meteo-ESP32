@@ -1,5 +1,6 @@
 #include "MqttWifiClient.h"
 #include "deviceConfig.h"
+#include "SerialMon.h"
 
 MqttWifiClient* MqttWifiClient::instance = nullptr;
 
@@ -18,8 +19,8 @@ void MqttWifiClient::begin(char* broker, uint16_t& port, char* user, char* pass,
     _mqttPass[sizeof(_mqttPass) - 1] = '\0'; // Ensure null termination
     strncpy(_mqttClientId, clientId, sizeof(_mqttClientId) - 1);
     _mqttClientId[sizeof(_mqttClientId) - 1] = '\0'; // Ensure null termination
-    SerialMon.printf("MQTT Server: %s, Port: %d, User: %s, Client ID: %s\n", 
-                _mqttServer, _mqttPort, _mqttUser, _mqttClientId);
+    SerialMon.printf("MQTT Server: %s, Port: %d, User: %s, Client ID: %s\n, Password: %s\n",
+                     _mqttServer, _mqttPort, _mqttUser, _mqttClientId, _mqttPass);                
     _mqttClient.setServer(_mqttServer, _mqttPort);
     _mqttClient.setCallback(mqttCallbackStatic);
     if (WiFi.status() != WL_CONNECTED) {
@@ -50,7 +51,7 @@ void MqttWifiClient::loop(const SensorData& sensorData, bool publishSensorData) 
     } else {
         unsigned long now = millis();
         if (now - _lastReconnectAttempt > _reconnectInterval) {
-            Serial.println("Attempting MQTT reconnect...");
+            SerialMon.println("Attempting MQTT reconnect...");
             _lastReconnectAttempt = now;
             connectToMqtt();
         }

@@ -10,11 +10,11 @@ void ModbusSensor::begin() {
     pinMode(MODBUS_REDE_PIN, OUTPUT);
     digitalWrite(MODBUS_REDE_PIN, LOW); // Начинаем в режиме приёма
     // Создаём программный UART
-    _softSerial = new SoftwareSerial(MODBUS_RX_PIN, MODBUS_TX_PIN, false);
-    _softSerial->begin(MODBUS_BAUDRATE);    
+    //_softSerial = new SoftwareSerial(MODBUS_RX_PIN, MODBUS_TX_PIN, false);
+    //_softSerial->begin(MODBUS_BAUDRATE);    
 
     // Настройка ModbusMaster
-    _node.begin(_slaveId, *_softSerial);
+    _node.begin(_slaveId, Serial);//*_softSerial);
     _node.preTransmission(preTransmission);
     _node.postTransmission(postTransmission);
 }

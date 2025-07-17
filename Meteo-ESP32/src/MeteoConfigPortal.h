@@ -63,7 +63,8 @@ private:
     //void loadMQTTFromEEPROM(char* broker, uint16_t& port, char* user, char* pass, char* clientId);
     void saveMQTTToEEPROM(const String& broker, uint16_t port, const String& user, const String& pass, const String& clientId);
     void loadMQTTFromEEPROM(char* broker, uint16_t& port, char* user, char* pass, char* clientId);
-
+    void saveFTPToEEPROM(const String& server, const String& user, const String& pass);
+    void saveHttpServerToEEPROM(const String& server);
     void handleRoot();
     void handleSetDeviceId();
     void handleGetDeviceId();
@@ -85,6 +86,7 @@ private:
     void handleSetHttpServer();
     void handleGetSensorData();
     void handleSensor();
+    void handleSetDefaults();
 };
 
 #endif

@@ -2,6 +2,7 @@
 #include <EEPROM.h>
 #include <ESPmDNS.h>
 #include "deviceConfig.h"
+#include "SerialMon.h"
 
 // ==== Конструктор ====
 MeteoConfigPortal::MeteoConfigPortal() : server(80) {}
@@ -290,6 +291,46 @@ void MeteoConfigPortal::loadMQTTFromEEPROM(char* broker, uint16_t& port, char* u
     clientId[31] = '\0';
 }
 
+void MeteoConfigPortal::saveFTPToEEPROM(const String& server, const String& user, const String& pass) {
+    int addr = FTP_EEPROM_ADDR;
+
+    // Server (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        char c = i < server.length() ? server[i] : 0;
+        EEPROM.write(addr++, c);
+    }
+
+    // Username (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        char c = i < user.length() ? user[i] : 0;
+        EEPROM.write(addr++, c);
+    }
+
+    // Password (макс 32 байта)
+    for (int i = 0; i < 32; ++i) {
+        char c = i < pass.length() ? pass[i] : 0;
+        EEPROM.write(addr++, c);
+    }
+
+    EEPROM.commit();
+    SerialMon.println("FTP settings saved to EEPROM:");
+    SerialMon.printf("Server: %s, User: %s, Pass: %s\n", server.c_str(), user.c_str(), pass.c_str());
+}
+
+void MeteoConfigPortal::saveHttpServerToEEPROM(const String& server) {
+    int addr = HTTP_SERVER_EEPROM_ADDR;
+
+    // Server (макс 64 байта)
+    for (int i = 0; i < 64; ++i) {
+        char c = i < server.length() ? server[i] : 0;
+        EEPROM.write(addr++, c);
+    }
+
+    EEPROM.commit();
+    SerialMon.println("HTTP Server settings saved to EEPROM:");
+    SerialMon.printf("Server: %s\n", server.c_str());
+}
+
 // ==== Встроенный HTML-фронтенд ====
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -415,6 +456,13 @@ const char index_html[] PROGMEM = R"rawliteral(
             await fetch(`/setHttpServer?server=${server}`);
         }
 
+        async function setDefaults() {
+            if (confirm("Are you sure you want to reset all settings to default?")) {
+                await fetch("/setDefaults");
+                alert("Default settings applied. Device will reboot.");
+            }
+        }
+
         window.onload = function () {
             loadDevices();
             loadMQTT();
@@ -492,6 +540,8 @@ const char index_html[] PROGMEM = R"rawliteral(
     <button onclick="goToUpdate()">Update Firmware</button>
     <br><br>
     <button onclick="reboot()">Reboot Device</button>
+    <br><br>
+    <button onclick="setDefaults()">Set Default Settings</button>
 </body>
 </html>
 )rawliteral";
@@ -499,8 +549,7 @@ const char index_html[] PROGMEM = R"rawliteral(
 const char sensor_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="UTF-8">
+<head>    
     <title>Sensor Data</title>
     <script>
         async function fetchSensorData() {
@@ -528,8 +577,8 @@ const char sensor_html[] PROGMEM = R"rawliteral(
     <table border="1" cellpadding="5">
         <thead>
             <tr>
-                <th>Параметр</th>
-                <th>Значение</th>
+                <th>Parameter</th>
+                <th>Value</th>
             </tr>
         </thead>
         <tbody id="data">
@@ -824,6 +873,34 @@ void MeteoConfigPortal::handleSensor() {
     });
 }
 
+void MeteoConfigPortal::handleSetDefaults() {
+    server.on("/setDefaults", HTTP_GET, [this](AsyncWebServerRequest *request) {        
+        for (int i = 10; i < EEPROM_SIZE; i++) {
+            EEPROM.write(i, 0);
+        }
+        EEPROM.commit();
+    
+        // Сброс всех настроек к значениям по умолчанию
+        saveWiFiSettings(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
+        saveGPRSSettings(APN_DEFAULT, GPRS_USER_DEFAULT, GPRS_PASS_DEFAULT);
+        saveMQTTToEEPROM(MQTT_BROKER_DEFAULT, MQTT_PORT_DEFAULT, MQTT_USERNAME_DEFAULT, MQTT_PASSWORD_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
+        saveFTPToEEPROM(FTP_SERVER_DEFAULT, FTP_USER_DEFAULT, FTP_PASS_DEFAULT);
+        saveHttpServerToEEPROM(HTTP_SERVER_DEFAULT);
+        saveDeviceId(0);
+        transferPriority = PRIORITY_WIFI_ONLY;
+        EEPROM.write(TRANSFER_PRIORITY_ADDR, (uint8_t)transferPriority);
+        EEPROM.commit();
+        
+        // Сброс списка устройств
+        meteoDevices.clear();
+        saveDevicesToEEPROM();
+
+        request->send(200, "text/plain", "Default settings applied. Rebooting...");
+        delay(1000);
+        ESP.restart();
+    });
+}
+
 // ==== Настройка веб-сервера ====
 void MeteoConfigPortal::setupWebServer() {
     handleRoot();
@@ -854,4 +931,6 @@ void MeteoConfigPortal::setupWebServer() {
     handleSetHttpServer();
     handleGetSensorData();
     handleSensor();
+
+    handleSetDefaults();
 }

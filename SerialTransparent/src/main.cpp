@@ -4,7 +4,8 @@
 // Определите пины для подключения модема
 #define MODEM_RX 18
 #define MODEM_TX 17
-#define MODEM_POWER_PIN 8
+#define MODEM_GSM_EN_PIN 19
+#define MODEM_PWRKEY_PIN 37
 
 const char* FTP_SERVER = "ftp.drivehq.com";
 const char* FTP_USER = "MeteoESP";
@@ -42,11 +43,18 @@ void waitForResponse(const String& expectedResponse, int timeout = 5000) {
 void setup() {
     // Set console baud rate
     Serial.begin(115200);
-    delay(10);
+    
     // Включение питания модема
-    pinMode(MODEM_POWER_PIN, OUTPUT);
-    digitalWrite(MODEM_POWER_PIN, HIGH);
-    Serial.println("Wait...");
+    pinMode(MODEM_GSM_EN_PIN, OUTPUT);    
+    digitalWrite(MODEM_GSM_EN_PIN, HIGH);
+    Serial.println("Waiting for modem to power up...");
+    delay(2000);
+    pinMode(MODEM_PWRKEY_PIN, OUTPUT);
+    digitalWrite(MODEM_PWRKEY_PIN, HIGH);
+    Serial.println("PWR KEY LOW");
+    delay(2000);
+    digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
+    Serial.println("PWR KEY HIGH");
 
     // Set GSM module baud rate
     Serial1.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);

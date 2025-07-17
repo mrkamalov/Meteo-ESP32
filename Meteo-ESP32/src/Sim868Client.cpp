@@ -1,5 +1,6 @@
 #include "Sim868Client.h"
 #include <HardwareSerial.h>
+#include "SerialMon.h"
 
 // MQTT details
 // const char* topicLed       = "GsmClientTest/led";
@@ -122,11 +123,18 @@ boolean Sim868Client::mqttConnect() {
 }
 
 
-void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId) {
+void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId, char* apn, char* gprsUser, char* gprsPass) {
   // Включение питания модема
-  pinMode(MODEM_POWER_PIN, OUTPUT);
-  digitalWrite(MODEM_POWER_PIN, HIGH);  
-  delay(10);
+  pinMode(MODEM_GSM_EN_PIN, OUTPUT);    
+  digitalWrite(MODEM_GSM_EN_PIN, HIGH);
+  Serial.println("Waiting for modem to power up...");
+  delay(2000);
+  pinMode(MODEM_PWRKEY_PIN, OUTPUT);
+  digitalWrite(MODEM_PWRKEY_PIN, HIGH);
+  Serial.println("PWR KEY LOW");
+  delay(2000);
+  digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
+  Serial.println("PWR KEY HIGH");
   
   strncpy(_mqttServer, broker, sizeof(_mqttServer) - 1);
   _mqttServer[sizeof(_mqttServer) - 1] = '\0'; // Ensure null termination
@@ -139,6 +147,12 @@ void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, c
   _mqttClientId[sizeof(_mqttClientId) - 1] = '\0'; // Ensure null termination
   SerialMon.printf("MQTT Server: %s, Port: %d, User: %s, Client ID: %s\n", 
               _mqttServer, _mqttPort, _mqttUser, _mqttClientId);
+  strncpy(_apn, apn ? apn : APN_DEFAULT, sizeof(_apn) - 1);
+  _apn[sizeof(_apn) - 1] = '\0'; // Ensure null termination
+  strncpy(_gprsUser, gprsUser ? gprsUser : GPRS_USER_DEFAULT, sizeof(_gprsUser) - 1);
+  _gprsUser[sizeof(_gprsUser) - 1] = '\0'; // Ensure null termination
+  strncpy(_gprsPass, gprsPass ? gprsPass : GPRS_PASS_DEFAULT, sizeof(_gprsPass) - 1);
+  _gprsPass[sizeof(_gprsPass) - 1] = '\0'; // Ensure null termination
 
   pinMode(LED_PIN, OUTPUT);
   SerialMon.println("Wait...");
@@ -169,8 +183,8 @@ void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, c
 
   // GPRS connection parameters are usually set after network registration
   SerialMon.print(F("Connecting to "));
-  SerialMon.print(APN);
-  if (!_gsmModem->gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
+  SerialMon.print(_apn);
+  if (!_gsmModem->gprsConnect(_apn, _gprsUser, _gprsPass)) {
     SerialMon.println(" fail");
     delay(10000);
     return;
@@ -213,8 +227,8 @@ void Sim868Client::loop() {
     if (!_gsmModem->isGprsConnected()) {
       SerialMon.println("GPRS disconnected!");
       SerialMon.print(F("Connecting to "));
-      SerialMon.print(APN);
-      if (!_gsmModem->gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
+      SerialMon.print(_apn);
+      if (!_gsmModem->gprsConnect(_apn, _gprsUser, _gprsPass)) {
         SerialMon.println(" fail");
         delay(10000);
         return;

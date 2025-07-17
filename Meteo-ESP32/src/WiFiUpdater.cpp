@@ -8,6 +8,7 @@
 #include "CRC32Utils.h"
 #include <Update.h>
 #include <FS.h>
+#include "SerialMon.h"
 
 WiFiUpdater::WiFiUpdater() {}
 

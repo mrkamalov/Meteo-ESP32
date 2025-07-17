@@ -6,6 +6,7 @@
 #include <EEPROM.h>
 #include "CRC32Utils.h"
 #include "ServerSettings.h"
+#include "SerialMon.h"
 
 Sim800Updater::Sim800Updater(){}
 
@@ -297,7 +298,7 @@ bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC) {
 
     // Проверка формата версии
     if (!isValidVersionFormat(version)) {
-        Serial.printf("Invalid version format: %s\n", version.c_str());
+        SerialMon.printf("Invalid version format: %s\n", version.c_str());
         return false;
     }
     
@@ -341,7 +342,7 @@ bool Sim800Updater::checkForUpdates(String &version, uint32_t &remoteCRC) {
     }
 
     if (version == "" || version == currentVersion) {
-        Serial.println("No update required.");
+        SerialMon.println("No update required.");
         return false;
     }
 

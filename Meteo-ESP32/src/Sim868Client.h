@@ -11,7 +11,8 @@ class Sim868Client {
 public:
   Sim868Client(TinyGsm* modem, TinyGsmClient* client, PubSubClient*  mqtt);
 
-  void begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId);
+  void begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId, 
+            char* apn = nullptr, char* gprsUser = nullptr, char* gprsPass = nullptr);
   void loop();
   bool isModemConnected();
 
@@ -33,6 +34,9 @@ private:
     char _mqttUser[32] = {0};
     char _mqttPass[32] = {0};
     char _mqttClientId[32] = {0};
+    char _apn[21] = {0}; // APN for GPRS connection
+    char _gprsUser[21] = {0}; // GPRS username
+    char _gprsPass[21] = {0}; // GPRS password
 
     int ledStatus = LOW;
     int ledFieldNum = 1;

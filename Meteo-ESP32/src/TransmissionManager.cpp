@@ -1,5 +1,6 @@
 #include "TransmissionManager.h"
 #include <WiFi.h>
+#include "SerialMon.h"
 
 //static Sim800Updater simUpdater;
 
@@ -17,12 +18,14 @@ void TransmissionManager::begin() {
 
     lastPriority = meteoPortal.getTransferPriority();
     
-    loadSettingsFromEEPROM();
+    loadMQTTSettingsFromEEPROM();
+    loadGPRSSettingsFromEEPROM();
     wifiUpdater.begin();
     updater.begin();
     
     if (lastPriority == PRIORITY_GPRS_ONLY || lastPriority == PRIORITY_WIFI_THEN_GPRS) {
-        simClient->begin(_mqttServer, _mqttPort, _mqttUser, _mqttPass, _mqttClientId);
+        simClient->begin(_mqttServer, _mqttPort, _mqttUser, _mqttPass, _mqttClientId,
+                         _apn, _gprsUser, _gprsPass);
     }
     if (lastPriority == PRIORITY_WIFI_ONLY || lastPriority == PRIORITY_WIFI_THEN_GPRS) {
         mqttWifiClient.begin(_mqttServer, _mqttPort, _mqttUser, _mqttPass, _mqttClientId);
@@ -35,10 +38,9 @@ void TransmissionManager::loop() {
 
     // Можно отслеживать изменения приоритета, если необходимо
     if (currentPriority != lastPriority) {
-        lastPriority = currentPriority;
-        // (Опционально) Реинициализация компонентов при изменении приоритета
+        lastPriority = currentPriority;        
     }
-
+    
     bool receiveSensorData = readSensorData(); // Чтение данных датчика
     String sensorJson = getSensorDataJson();
     meteoPortal.loop(sensorJson);
@@ -53,7 +55,7 @@ void TransmissionManager::loop() {
     }
     switch (currentPriority) {
         case PRIORITY_WIFI_ONLY:
-            mqttWifiClient.loop(sensorData, false); ///receiveSensorData); // Обработка MQTT сообщений mytest TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
+            mqttWifiClient.loop(sensorData, false); //receiveSensorData); // Обработка MQTT сообщений mytest TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
             if(WiFi.status() == WL_CONNECTED && updateTimeoutPassed) {
                 // Если WiFi подключен, то проверяем обновления
                 wifiUpdater.updateFirmware();
@@ -109,7 +111,7 @@ bool TransmissionManager::readSensorData() {
     return false; // Данные не считаны
 }
 
-void TransmissionManager::loadSettingsFromEEPROM() {
+void TransmissionManager::loadMQTTSettingsFromEEPROM() {
     int addr = MQTT_EEPROM_START;
 
     bool isEmpty = true;
@@ -147,13 +149,37 @@ void TransmissionManager::loadSettingsFromEEPROM() {
         || _mqttClientId[0] == '\0') {
         SerialMon.println("EEPROM is empty, loading default MQTT config");
 
-        strncpy(_mqttServer, MQTT_BROKER, sizeof(_mqttServer));
-        _mqttPort = MQTT_PORT;
-        strncpy(_mqttUser, MQTT_USERNAME, sizeof(_mqttUser));
-        strncpy(_mqttPass, MQTT_PASSWORD, sizeof(_mqttPass));
-        strncpy(_mqttClientId, MQTT_CLIENT_ID, sizeof(_mqttClientId));
+        strncpy(_mqttServer, MQTT_BROKER_DEFAULT, sizeof(_mqttServer));
+        _mqttPort = MQTT_PORT_DEFAULT;
+        strncpy(_mqttUser, MQTT_USERNAME_DEFAULT, sizeof(_mqttUser));
+        strncpy(_mqttPass, MQTT_PASSWORD_DEFAULT, sizeof(_mqttPass));
+        strncpy(_mqttClientId, MQTT_CLIENT_ID_DEFAULT, sizeof(_mqttClientId));
     }
-    else SerialMon.println("Loaded MQTT config from EEPROM");    
+    else SerialMon.println("Loaded MQTT config from EEPROM");
+}
+
+void TransmissionManager::loadGPRSSettingsFromEEPROM() {
+    int addr = GPRS_APN_ADDR;
+    
+    // APN (макс 20 байта)
+    for (int i = 0; i < 20; ++i) {
+        _apn[i] = EEPROM.read(addr++);
+    }
+    _apn[20] = '\0';
+
+    // GPRS User (макс 20 байта)
+    for (int i = 0; i < 20; ++i) {
+        _gprsUser[i] = EEPROM.read(addr++);
+    }
+    _gprsUser[20] = '\0';
+
+    // GPRS Pass (макс 20 байта)
+    for (int i = 0; i < 20; ++i) {
+        _gprsPass[i] = EEPROM.read(addr++);
+    }
+    _gprsPass[20] = '\0';
+
+    SerialMon.printf("GPRS Settings: APN=%s, User=%s, Pass=%s\n", _apn, _gprsUser, _gprsPass);
 }
 
 String TransmissionManager::getSensorDataJson() {

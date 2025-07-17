@@ -38,8 +38,12 @@ private:
     char _mqttClientId[32];    
     ModbusSensor meteosensor;
     SensorData sensorData;
+    char _apn[21];
+    char _gprsUser[21];
+    char _gprsPass[21];
     
-    void loadSettingsFromEEPROM();
+    void loadMQTTSettingsFromEEPROM();
+    void loadGPRSSettingsFromEEPROM();
     String getSensorDataJson();
     bool readSensorData(void);
 };

@@ -1,28 +1,34 @@
 #pragma once
 
+#include "SerialMon.h"
+
 #define MODEM_RX 18
 #define MODEM_TX 17
-#define MODEM_POWER_PIN 8
+#define MODEM_GSM_EN_PIN 19
+#define MODEM_PWRKEY_PIN 37
 // Select your modem:
 #define TINY_GSM_MODEM_SIM800
 // Set serial for debug console (to the Serial Monitor, default speed 115200)
-#define SerialMon Serial
+//#define SerialMon Serial
 #define SerialAT Serial1
 // Define the serial console for debug prints, if needed
 #define TINY_GSM_DEBUG SerialMon
 // set GSM PIN, if any
 #define GSM_PIN ""
 #define LED_PIN 1
+// WIFI
+#define WIFI_SSID_DEFAULT   "SG_RND"
+#define WIFI_PASS_DEFAULT   "korkemwifi"
 // GPRS
-#define APN         "internet.altel.kz"
-#define GPRS_USER   ""
-#define GPRS_PASS   ""
+#define APN_DEFAULT         "internet.altel.kz"
+#define GPRS_USER_DEFAULT   ""
+#define GPRS_PASS_DEFAULT   ""
 // MQTT
-#define MQTT_USERNAME "CjQvGwkeDxwLOC8FKCMcACA"
-#define MQTT_CLIENT_ID "CjQvGwkeDxwLOC8FKCMcACA"
-#define MQTT_PASSWORD "VUgJOQcuoIl+A4OQXmr4Gs01"
-#define MQTT_BROKER   "mqtt3.thingspeak.com"
-#define MQTT_PORT     1883
+#define MQTT_USERNAME_DEFAULT "CjQvGwkeDxwLOC8FKCMcACA"
+#define MQTT_CLIENT_ID_DEFAULT "CjQvGwkeDxwLOC8FKCMcACA"
+#define MQTT_PASSWORD_DEFAULT "VUgJOQcuoIl+A4OQXmr4Gs01"
+#define MQTT_BROKER_DEFAULT   "mqtt3.thingspeak.com"
+#define MQTT_PORT_DEFAULT     1883
 #define MQTT_CHANNEL_ID 2385945
 #define SUBSCRIBE_TO_CHANNEL 0
 
@@ -37,7 +43,7 @@
 #define MODBUS_BAUDRATE   9600
 #define MODBUS_RX_PIN     41
 #define MODBUS_TX_PIN     42
-#define MODBUS_REDE_PIN   39
+#define MODBUS_REDE_PIN   8
 
 struct SensorData {
     float gas1;
