@@ -32,25 +32,22 @@ void Sim868Client::mqttPublish(long pubChannelID, int dataArray[], int fieldArra
     int index=0;
     String dataString="";
     
-    //updateRSSIValue();  // Make sure the stored value is updated.
-    
-    // 
-    while (index<8){
-        
+    while (index<8){        
         // Look at the field array to build the posting string to send to ThingSpeak.
-        if (fieldArray[ index ]>0){
-          
+        if (fieldArray[ index ]>0){          
             dataString+="&field" + String( index+1 ) + "="+String( dataArray [ index ] );
         }
         index++;
     }
     
-    SerialMon.println( dataString );
-    
+    SerialMon.println( dataString );    
     // Create a topic string and publish data to ThingSpeak channel feed.
      String topicString ="channels/" + String( pubChannelID ) + "/publish";
-    _mqttClient->publish( topicString.c_str(), dataString.c_str() );
-    SerialMon.println( "Published to channel " + String( pubChannelID ) );
+    if(_mqttClient->publish(topicString.c_str(), dataString.c_str())) {
+        SerialMon.println("Published successfully to channel " + String(pubChannelID));
+    } else {
+        SerialMon.println("Failed to publish to channel " + String(pubChannelID));
+    }
 }
 
 void Sim868Client::handleMqttMessage(char* topic, byte* payload, unsigned int len) {
@@ -58,19 +55,7 @@ void Sim868Client::handleMqttMessage(char* topic, byte* payload, unsigned int le
   SerialMon.print(topic);
   SerialMon.print("]: ");
   SerialMon.write(payload, len);
-  SerialMon.println();
-
-  //Only proceed if incoming message's topic matches
-  if (String(topic) == "channels/"+String(MQTT_CHANNEL_ID)+"/subscribe/fields/field"+String(ledFieldNum)) {
-    SerialMon.println("receive ledField topic");
-    char p[len + 1];
-    memcpy(p, payload, len);
-    p[len] = NULL;
-    ledStatus =atoi(p)>0?HIGH:LOW;
-    digitalWrite(LED_PIN, ledStatus);
-    dataToPublish[ledFieldNum] = ledStatus*10;
-    mqttPublish(MQTT_CHANNEL_ID, dataToPublish, fieldsToPublish);
-  }
+  SerialMon.println();  
 }
 
 /**
@@ -122,42 +107,38 @@ boolean Sim868Client::mqttConnect() {
   return _mqttClient->connected();
 }
 
-
-void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId, char* apn, char* gprsUser, char* gprsPass) {
-  // Включение питания модема
-  pinMode(MODEM_GSM_EN_PIN, OUTPUT);    
+void Sim868Client::modemPowerUp(void){
+ // Включение питания модема
+  SerialMon.println("Modem power up delay");  
+  pinMode(MODEM_GSM_EN_PIN, OUTPUT);
+  digitalWrite(MODEM_GSM_EN_PIN, LOW);
+  delay(3200);
   digitalWrite(MODEM_GSM_EN_PIN, HIGH);
-  Serial.println("Waiting for modem to power up...");
-  delay(2000);
+  SerialMon.println("Waiting for modem to power up...");
+  delay(500);
   pinMode(MODEM_PWRKEY_PIN, OUTPUT);
   digitalWrite(MODEM_PWRKEY_PIN, HIGH);
-  Serial.println("PWR KEY LOW");
-  delay(2000);
+  SerialMon.println("PWR KEY LOW");
+  delay(1500);  
   digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
-  Serial.println("PWR KEY HIGH");
-  
-  strncpy(_mqttServer, broker, sizeof(_mqttServer) - 1);
-  _mqttServer[sizeof(_mqttServer) - 1] = '\0'; // Ensure null termination
-  _mqttPort = port;
-  strncpy(_mqttUser, user, sizeof(_mqttUser) - 1);
-  _mqttUser[sizeof(_mqttUser) - 1] = '\0'; // Ensure null termination
-  strncpy(_mqttPass, pass, sizeof(_mqttPass) - 1);
-  _mqttPass[sizeof(_mqttPass) - 1] = '\0'; // Ensure null termination
-  strncpy(_mqttClientId, clientId, sizeof(_mqttClientId) - 1);
-  _mqttClientId[sizeof(_mqttClientId) - 1] = '\0'; // Ensure null termination
-  SerialMon.printf("MQTT Server: %s, Port: %d, User: %s, Client ID: %s\n", 
-              _mqttServer, _mqttPort, _mqttUser, _mqttClientId);
+  SerialMon.println("PWR KEY HIGH");
+  SerialMon.println("Wait...");
+  delay(2000);
+  pinMode(MODEM_STATUS_PIN, INPUT); // Set status pin as input
+  //read status pin
+  if (digitalRead(MODEM_STATUS_PIN) != HIGH) delay(2000);
+}
+
+bool Sim868Client::initGsmModem(char* apn, char* gprsUser, char* gprsPass){
+  modemPowerUp();
+
   strncpy(_apn, apn ? apn : APN_DEFAULT, sizeof(_apn) - 1);
   _apn[sizeof(_apn) - 1] = '\0'; // Ensure null termination
   strncpy(_gprsUser, gprsUser ? gprsUser : GPRS_USER_DEFAULT, sizeof(_gprsUser) - 1);
   _gprsUser[sizeof(_gprsUser) - 1] = '\0'; // Ensure null termination
   strncpy(_gprsPass, gprsPass ? gprsPass : GPRS_PASS_DEFAULT, sizeof(_gprsPass) - 1);
-  _gprsPass[sizeof(_gprsPass) - 1] = '\0'; // Ensure null termination
-
-  pinMode(LED_PIN, OUTPUT);
-  SerialMon.println("Wait...");
-  delay(6000);
-
+  _gprsPass[sizeof(_gprsPass) - 1] = '\0'; // Ensure null termination 
+   
   // Restart takes quite some time
   // To skip it, call init() instead of restart()
   SerialMon.println("Initializing modem...");
@@ -172,27 +153,42 @@ void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, c
   if (GSM_PIN && _gsmModem->getSimStatus() != 3) { _gsmModem->simUnlock(GSM_PIN); }
 
   SerialMon.print("Waiting for network...");
-  if (!_gsmModem->waitForNetwork()) {
-    SerialMon.println(" fail");
-    delay(10000);
-    return;
+  if (!_gsmModem->waitForNetwork(10000L, true)) {
+    SerialMon.println(" fail");    
+    return false ;
   }
   SerialMon.println(" success");
 
   if (_gsmModem->isNetworkConnected()) { SerialMon.println("Network connected"); }
+  return true;
+}
+
+void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId, char* apn, char* gprsUser, char* gprsPass) {
+  if(!initGsmModem(apn, gprsUser, gprsPass)) return;  
 
   // GPRS connection parameters are usually set after network registration
   SerialMon.print(F("Connecting to "));
   SerialMon.print(_apn);
   if (!_gsmModem->gprsConnect(_apn, _gprsUser, _gprsPass)) {
-    SerialMon.println(" fail");
-    delay(10000);
+    SerialMon.println(" fail");    
     return;
   }
   SerialMon.println(" success");
 
   if (_gsmModem->isGprsConnected()) { SerialMon.println("GPRS connected"); }
+  checkExternalPower();
 
+  strncpy(_mqttServer, broker, sizeof(_mqttServer) - 1);
+  _mqttServer[sizeof(_mqttServer) - 1] = '\0'; // Ensure null termination
+  _mqttPort = port;
+  strncpy(_mqttUser, user, sizeof(_mqttUser) - 1);
+  _mqttUser[sizeof(_mqttUser) - 1] = '\0'; // Ensure null termination
+  strncpy(_mqttPass, pass, sizeof(_mqttPass) - 1);
+  _mqttPass[sizeof(_mqttPass) - 1] = '\0'; // Ensure null termination
+  strncpy(_mqttClientId, clientId, sizeof(_mqttClientId) - 1);
+  _mqttClientId[sizeof(_mqttClientId) - 1] = '\0'; // Ensure null termination
+  SerialMon.printf("MQTT Server: %s, Port: %d, User: %s, Client ID: %s\n", 
+              _mqttServer, _mqttPort, _mqttUser, _mqttClientId);
   // MQTT Broker setup
   _mqttClient->setServer(_mqttServer, _mqttPort);
   _mqttClient->setCallback(mqttCallbackStatic);
@@ -207,6 +203,38 @@ void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, c
     SerialMon.println("⚠️ Сигнал слабый! Проверьте антенну или покрытие.");
   } else {
     SerialMon.println("✅ Сигнал в порядке.");
+  }  
+}
+
+void Sim868Client::sendPowerLossAlert() {
+  if (!_gsmModem->isGprsConnected()){
+    SerialMon.println("Sending power loss alert via SMS...");
+    _gsmModem->sendSMS(SMS_TARGET, String("Power off"));
+  }
+  else
+    SerialMon.println("GPRS connected, send alert to Telegram");
+  
+}
+
+// === Проверка внешнего питания ===
+void Sim868Client::checkExternalPower() {
+  static unsigned long powerLossTime = 0;
+  int raw = analogRead(EXTERNAL_POWER_PIN);
+  float voltage = (raw / 4095.0) * 3300; // мВ
+  SerialMon.printf("Напряжение на IO16: %.2f мВ\n", voltage);
+  if(powerLost){    
+    SerialMon.println("Время работы без питания (мс): " + String(millis()-powerLossTime));
+  }
+
+  prevPowerLost = powerLost;
+  powerLost = voltage < POWER_LOSS_THRESHOLD;
+
+  if (powerLost && !prevPowerLost) {
+    SerialMon.println("⚠️ Обнаружено пропадание внешнего питания!");
+    powerLossTime = millis(); // Запоминаем время потери питания
+    sendPowerLossAlert();
+  } else if (!powerLost && prevPowerLost) {
+    SerialMon.println("✅ Внешнее питание восстановлено.");
   }
 }
 
@@ -214,27 +242,59 @@ void Sim868Client::loop() {
   // Make sure we're still registered on the network
   if (!_gsmModem->isNetworkConnected()) {
     SerialMon.println("Network disconnected");
-    if (!_gsmModem->waitForNetwork(180000L, true)) {
+    if (!_gsmModem->waitForNetwork(3000L, true)) {
       SerialMon.println(" fail");
-      delay(10000);
-      return;
+      uint32_t t = millis();
+      if (t - modemReconnectAttempt > 60000L) {
+        modemReconnectAttempt = t;
+        digitalWrite(MODEM_GSM_EN_PIN, LOW);
+        delay(3200);
+        digitalWrite(MODEM_GSM_EN_PIN, HIGH);
+        delay(500);
+        digitalWrite(MODEM_PWRKEY_PIN, HIGH);
+        SerialMon.println("PWR KEY LOW");
+        delay(1500);
+        digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
+        SerialMon.println("PWR KEY HIGH");
+        SerialMon.println("Wait...");
+        delay(2000);        
+        if (digitalRead(MODEM_STATUS_PIN) != HIGH) delay(2000);
+        SerialMon.println("Reconnecting to network...");
+        if (!_gsmModem->restart()) {
+          SerialMon.println("Failed to restart modem");
+          return;
+        }
+      }      
+      else return;
     }
     if (_gsmModem->isNetworkConnected()) {
       SerialMon.println("Network re-connected");
     }
 
     // and make sure GPRS/EPS is still connected
-    if (!_gsmModem->isGprsConnected()) {
+    if (_gsmModem->isNetworkConnected()) {
       SerialMon.println("GPRS disconnected!");
       SerialMon.print(F("Connecting to "));
       SerialMon.print(_apn);
       if (!_gsmModem->gprsConnect(_apn, _gprsUser, _gprsPass)) {
-        SerialMon.println(" fail");
-        delay(10000);
+        SerialMon.println(" fail");        
         return;
       }
       if (_gsmModem->isGprsConnected()) { SerialMon.println("GPRS reconnected"); }
     }
+  }
+
+  checkExternalPower();
+
+  if(_gsmModem->isNetworkConnected() && !_gsmModem->isGprsConnected()) {
+    SerialMon.println("GPRS disconnected!");
+    SerialMon.print(F("Connecting to "));
+    SerialMon.print(_apn);
+    if (!_gsmModem->gprsConnect(_apn, _gprsUser, _gprsPass)) {
+      SerialMon.println(" fail");      
+      return;
+    }
+    if (_gsmModem->isGprsConnected()) { SerialMon.println("GPRS reconnected"); }
   }
 
   if (!_mqttClient->connected()) {
@@ -243,6 +303,9 @@ void Sim868Client::loop() {
     uint32_t t = millis();
     if (t - lastReconnectAttempt > 10000L) {
       lastReconnectAttempt = t;
+      // MQTT Broker setup
+      _mqttClient->setServer(_mqttServer, _mqttPort);
+      _mqttClient->setCallback(mqttCallbackStatic);
       if (mqttConnect()) { lastReconnectAttempt = 0; }
     }
     delay(100);
@@ -254,4 +317,28 @@ void Sim868Client::loop() {
 
 bool Sim868Client::isModemConnected() {
   return _gsmModem->isNetworkConnected() && _gsmModem->isGprsConnected();
+}
+
+void Sim868Client::transmitMqttData(const SensorData& sensorData, bool publishSensorData) {
+  if (!isModemConnected()) {
+    SerialMon.println("Modem is not connected, cannot transmit data.");
+    return;
+  }
+
+  if(!_mqttClient->connected()) {
+    SerialMon.println("MQTT client is not connected, cannot transmit data.");
+    return;
+  }
+
+  if (publishSensorData) {
+    dataToPublish[0] = sensorData.gas1;
+    dataToPublish[1] = sensorData.gas2;
+    dataToPublish[2] = sensorData.gas3;
+    dataToPublish[3] = sensorData.gas4;
+    dataToPublish[4] = sensorData.pm25;
+    dataToPublish[5] = sensorData.externalTemp;
+    dataToPublish[6] = sensorData.humidity;
+    dataToPublish[7] = millis() / 1000.0; // Current time in seconds
+    mqttPublish(MQTT_CHANNEL_ID, dataToPublish, fieldsToPublish);
+  }
 }

@@ -1,1 +1,2 @@
 IAR_TEST/EWARM/IAR_TEST/Obj/**/*.o
+Meteo-ESP32/src/secrets.h

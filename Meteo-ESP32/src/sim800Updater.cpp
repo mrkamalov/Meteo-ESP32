@@ -129,8 +129,8 @@ bool Sim800Updater::initSpiffs() {
     }
 }
 
-bool Sim800Updater::downloadFirmware (){
-    File file = SPIFFS.open(LOCAL_FILE, FILE_WRITE);
+bool Sim800Updater::downloadFileFromFtp(const String& remoteFilename, bool appendMode, int partSize, bool isLastPart) {// TODO: Test FTP download
+    File file = SPIFFS.open(LOCAL_FILE, appendMode ? FILE_APPEND : FILE_WRITE);    
     if (!file) {
         SerialMon.println("Failed to open file for writing");
         return false;
@@ -142,15 +142,16 @@ bool Sim800Updater::downloadFirmware (){
     sendCommand("AT+FTPUN=\"" + String(FTP_USER) + "\"");
     sendCommand("AT+FTPPW=\"" + String(FTP_PASS) + "\"");
     sendCommand("AT+FTPTYPE=I");
-    sendCommand("AT+FTPGETNAME=\"" + String(FILE_NAME) + "\"");
+    sendCommand("AT+FTPGETNAME=\"" + remoteFilename + "\"");
     sendCommand("AT+FTPGETPATH=\"/\"");
     sendCommand("AT+FTPGET=1");  // Начинаем загрузку файла
+    SerialMon.printf("Starting download %s from FTP server: %s\n", remoteFilename.c_str());
+    isLastPart? SerialMon.println("Last part of the file") : SerialMon.printf("Part size: %d bytes\n", partSize);
     // Ожидание подтверждения от модема
     delay(5000);
     waitForResponse("+FTPGET: 1,1\r\n", 15000);
     int totalBytes = 0;    
-    while (true) {
-        //SerialMon.println("AT Command: AT+FTPGET=2,256");// Запрос данных
+    while (true) {        
         SerialAT.println("AT+FTPGET=2,256");
         delay(150);//50 ms minimum delay
         String response = "";
@@ -179,9 +180,10 @@ bool Sim800Updater::downloadFirmware (){
                     }
                     c= response.charAt(i);
                     file.write(response[i]);                    
-                    SerialMon.printf("%c", c);
+                    // SerialMon.printf("%c", c);
                     totalBytes++;
-                }
+                }                
+                SerialMon.printf("Total bytes written: %d\n", totalBytes);
             }            
         }
     }
@@ -195,35 +197,137 @@ bool Sim800Updater::downloadFirmware (){
     return true;
 }
 
-bool Sim800Updater::updateFirmwareViaGPRS() {
-    String newVersion = "";
-    uint32_t serverCRC;
+// bool Sim800Updater::updateFirmwareViaGPRS() {
+//     String newVersion = "";
+//     uint32_t serverCRC;
 
-    if(checkForUpdates(newVersion, serverCRC)) {
-        SerialMon.println("Обновление доступно!");
-    } else {        
-        return false;
-    }
-    initCRCTable();
-    if (!initSpiffs()) return false;
+//     if(checkForUpdates(newVersion, serverCRC)) {
+//         SerialMon.println("Обновление доступно!");
+//     } else {        
+//         return false;
+//     }
+//     initCRCTable();
+//     if (!initSpiffs()) return false;
 
-    if (!downloadFirmware()) {
-        SerialMon.println("Ошибка загрузки файла прошивки!");
-        return false;
-    }
+//     if (!downloadFirmware()) {
+//         SerialMon.println("Ошибка загрузки файла прошивки!");
+//         return false;
+//     }
     
-    uint32_t localCRC = calculateFileCRC32(LOCAL_FILE);
+//     uint32_t localCRC = calculateFileCRC32(LOCAL_FILE);
 
-    SerialMon.printf("CRC32 локального файла: 0x%08X\n", localCRC);
-    if (serverCRC == 0 || serverCRC != localCRC) {
-        SerialMon.println("Ошибка: CRC32 не совпадает!");
-        return false;
+//     SerialMon.printf("CRC32 локального файла: 0x%08X\n", localCRC);
+//     if (serverCRC == 0 || serverCRC != localCRC) {
+//         SerialMon.println("Ошибка: CRC32 не совпадает!");
+//         return false;
+//     }
+
+//     SerialMon.println("CRC32 совпадает!");
+//     performFirmwareUpdate(newVersion);
+//     return true;
+// }
+
+void Sim800Updater::updateFirmwareViaGPRS() {
+    switch (updateState) {
+        case IDLE:
+            SerialMon.println("[IDLE] Запуск обновления...");
+            fwVersion = "";
+            fwCRC = 0;
+            fwParts = 0;
+            fwPartSize = 0;
+            currentPart = 0;
+            appendMode = false;            
+            updateState = LOAD_CONFIG_INITIAL;
+            break;
+
+        case LOAD_CONFIG_INITIAL: {
+            String ver; uint32_t crc; int parts, size;
+            if (checkForUpdates(ver, crc, parts, size)) {
+                fwVersion = ver;
+                fwCRC = crc;
+                fwParts = parts;
+                fwPartSize = size;
+                SerialMon.printf("Обновление найдено: версия %s, CRC: 0x%08X, частей: %d, размер части: %d\n",
+                                 fwVersion.c_str(), fwCRC, fwParts, fwPartSize);
+               initCRCTable();
+               if (!initSpiffs()) updateState = IDLE;
+               else updateState = DOWNLOAD_PART;                
+            } else {
+                SerialMon.println("Обновление не найдено. Ожидание следующей проверки...");                
+            }
+            break;
+        }
+
+        case DOWNLOAD_PART: {
+            // Повторно проверяем, не изменилась ли конфигурация
+            String ver; uint32_t crc; int parts, size;
+            if (!checkForUpdates(ver, crc, parts, size)) {
+                SerialMon.println("Ошибка загрузки конфигурации.");
+                updateState = IDLE;
+                break;
+            }
+
+            if (ver != fwVersion || crc != fwCRC || parts != fwParts || size != fwPartSize) {
+                SerialMon.println("Конфигурация изменилась. Перезапуск...");
+                updateState = IDLE;
+                break;
+            }            
+
+            char partName[32];
+            sprintf(partName, "firmware_part%03d.bin", currentPart);
+            SerialMon.printf("Загрузка части %d: %s\n", currentPart, partName);
+
+            if (!downloadFileFromFtp(partName, appendMode, fwPartSize, (currentPart == fwParts - 1))) {
+                SerialMon.printf("Ошибка загрузки части %d\n", currentPart);
+                updateState = IDLE;
+                break;
+            }
+
+            currentPart++;
+            appendMode = true;
+            if (currentPart >= fwParts) {
+                updateState = VERIFY_CRC;
+                break;
+            }
+            break;
+        }
+
+        case VERIFY_CRC: {
+            String ver; uint32_t crc; int parts, size;
+            if (!checkForUpdates(ver, crc, parts, size)) {
+                SerialMon.println("Ошибка загрузки конфигурации перед CRC.");
+                updateState = IDLE;
+                break;
+            }
+
+            if (ver != fwVersion || crc != fwCRC || parts != fwParts || size != fwPartSize) {
+                SerialMon.println("Конфигурация изменилась перед CRC. Перезапуск...");
+                updateState = IDLE;
+                break;
+            }
+
+            uint32_t localCRC = calculateFileCRC32(LOCAL_FILE);
+            SerialMon.printf("CRC локального файла: 0x%08X\n", localCRC);
+
+            if (fwCRC == 0 || fwCRC != localCRC) {
+                SerialMon.println("Ошибка: CRC не совпадает.");
+                updateState = IDLE;
+                break;
+            }
+
+            SerialMon.println("CRC совпадает. Обновляем прошивку...");
+            performFirmwareUpdate(fwVersion);
+            updateState = UPDATE_DONE;
+            break;
+        }
+
+        case UPDATE_DONE:
+            SerialMon.println("Обновление завершено успешно.");
+            updateState = IDLE;
+            break;        
     }
-
-    SerialMon.println("CRC32 совпадает!");
-    performFirmwareUpdate(newVersion);
-    return true;
 }
+
 
 String Sim800Updater::readLocalVersion() {
     String version = "";
@@ -249,7 +353,7 @@ void Sim800Updater::saveVersionToEEPROM(const String& version) {
     SerialMon.println("Версия прошивки сохранена в EEPROM");
 }
 
-bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC) {
+bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int& partsCount, int& partSize) {
     SerialMon.println("Загрузка версии из FTP...");
 
     sendCommand("AT+FTPCID=1");
@@ -289,28 +393,51 @@ bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC) {
     SerialMon.print("Строка конфигурации: ");
     SerialMon.println(line);
 
-    // Ожидаем формат: "1.0.0 1234567890"
-    int sep = line.indexOf(' ');
-    if (sep == -1) return false;
+    // Ожидаем формат: "1.0.0 CRC32_HEX PARTS_COUNT PART_SIZE"
+    int sep1 = line.indexOf(' ');
+    if (sep1 == -1) return false;
 
-    version = line.substring(0, sep);
-    String crcStr = line.substring(sep + 1);
+    int sep2 = line.indexOf(' ', sep1 + 1);
+    if (sep2 == -1) return false;
+
+    int sep3 = line.indexOf(' ', sep2 + 1);
+    if (sep3 == -1) return false;
+
+    version = line.substring(0, sep1);
+    String crcStr = line.substring(sep1 + 1, sep2);
+    String partsCountStr = line.substring(sep2 + 1, sep3);
+    String partSizeStr = line.substring(sep3 + 1);
 
     // Проверка формата версии
     if (!isValidVersionFormat(version)) {
         SerialMon.printf("Invalid version format: %s\n", version.c_str());
         return false;
     }
-    
+
+    // CRC в hex формате
     remoteCRC = (uint32_t)strtoul(crcStr.c_str(), nullptr, 16);
     if (remoteCRC == 0) {
         SerialMon.println("Некорректный CRC.");
         return false;
     }
 
+    // Количество частей
+    partsCount = partsCountStr.toInt();
+    if (partsCount <= 0) {
+        SerialMon.println("Некорректное количество частей.");
+        return false;
+    }
+
+    // Размер одной части
+    partSize = partSizeStr.toInt();
+    if (partSize <= 0) {
+        SerialMon.println("Некорректный размер части.");
+        return false;
+    }
+
     // Закрытие FTP-сессии
     sendCommand("AT+FTPQUIT", 3000);
-    SerialMon.printf("Версия: %s, CRC: %08X\n", version.c_str(), remoteCRC);
+    SerialMon.printf("Версия: %s, CRC: %08X, Parts: %d\n", version.c_str(), remoteCRC, partsCount);  
     return true;
 }
 
@@ -332,16 +459,16 @@ bool Sim800Updater::isValidVersionFormat(const String& version) {
            major.toInt() >= 0 && minor.toInt() >= 0 && patch.toInt() >= 0;
 }
 
-bool Sim800Updater::checkForUpdates(String &version, uint32_t &remoteCRC) {
+bool Sim800Updater::checkForUpdates(String &version, uint32_t &remoteCRC, int& partsCount, int& partSize) {
     //return false;
     String currentVersion = readLocalVersion();
 
-    if (!fetchConfigFromFTP(version, remoteCRC)) {
+    if (!fetchConfigFromFTP(version, remoteCRC, partsCount, partSize)) {
         SerialMon.println("Ошибка загрузки версии и CRC.");
         return false;
     }
 
-    if (version == "" || version == currentVersion) {
+    if (version == "" || version == currentVersion || remoteCRC == 0 || partsCount <= 0 || partSize <= 0) {
         SerialMon.println("No update required.");
         return false;
     }

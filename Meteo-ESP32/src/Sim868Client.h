@@ -15,6 +15,7 @@ public:
             char* apn = nullptr, char* gprsUser = nullptr, char* gprsPass = nullptr);
   void loop();
   bool isModemConnected();
+  void transmitMqttData(const SensorData& sensorData, bool publishSensorData = false);
 
   static void mqttCallbackStatic(char *topic, byte *payload, unsigned int len);
 private:
@@ -23,6 +24,10 @@ private:
     int mqttSubscribe(long subChannelID, int field, int unsubSub );
     boolean mqttConnect();
     void handleMqttMessage(char *topic, byte *payload, unsigned int len);
+    void checkExternalPower(void);
+    void sendPowerLossAlert(void);
+    bool initGsmModem(char* apn, char* gprsUser, char* gprsPass);
+    void modemPowerUp(void);
 
     static Sim868Client *instance;
     TinyGsm* _gsmModem;
@@ -41,6 +46,9 @@ private:
     int ledStatus = LOW;
     int ledFieldNum = 1;
     uint32_t lastReconnectAttempt = 0;
-    int fieldsToPublish[8]={0,1,0,0,0,0,0,0};             // Change to allow multiple fields.
-    int dataToPublish[8] = {0,0,0,0,0,0,0,0}; 
+    uint32_t modemReconnectAttempt = 0; // Attempt to reconnect to modem
+    int fieldsToPublish[8]={1,1,1,1,1,1,1,1};             // Change to allow multiple fields.
+    int dataToPublish[8] = {0,0,0,0,0,0,0,0};
+    bool powerLost = false;
+    bool prevPowerLost = false;
 };

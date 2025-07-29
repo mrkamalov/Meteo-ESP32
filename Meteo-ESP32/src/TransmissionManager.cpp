@@ -22,7 +22,14 @@ void TransmissionManager::begin() {
     loadGPRSSettingsFromEEPROM();
     wifiUpdater.begin();
     updater.begin();
-    
+
+    // ADC настройки
+    analogSetAttenuation(ADC_11db);       // для измерения до ~3.3 В
+    analogReadResolution(12);             // 0–4095
+    pinMode(EXTERNAL_POWER_PIN, INPUT);
+
+    powerMonitor.handle(); // Мониторинг питания
+
     if (lastPriority == PRIORITY_GPRS_ONLY || lastPriority == PRIORITY_WIFI_THEN_GPRS) {
         simClient->begin(_mqttServer, _mqttPort, _mqttUser, _mqttPass, _mqttClientId,
                          _apn, _gprsUser, _gprsPass);
@@ -34,6 +41,7 @@ void TransmissionManager::begin() {
 }
 
 void TransmissionManager::loop() {
+    powerMonitor.handle(); // Мониторинг питания
     DataPriority currentPriority = meteoPortal.getTransferPriority();
 
     // Можно отслеживать изменения приоритета, если необходимо
@@ -45,7 +53,7 @@ void TransmissionManager::loop() {
     String sensorJson = getSensorDataJson();
     meteoPortal.loop(sensorJson);
 
-    if((millis() - lastUpdateCheck) > UPDATE_CHECK_INTERVAL_MS) {
+    if((millis() - lastUpdateCheck) > UPDATE_CHECK_INTERVAL_MS) {// TODO: Сделать отдельные таймауты для wifi и gprs
         updateTimeoutPassed = true;
         lastUpdateCheck = millis();
     }
@@ -65,16 +73,18 @@ void TransmissionManager::loop() {
 
         case PRIORITY_GPRS_ONLY:
             simClient->loop();
+            simClient->transmitMqttData(sensorData, false);// receiveSensorData); // Отправка данных датчика через MQTT TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
             if(simClient->isModemConnected() && updateTimeoutPassed) {
                 // Если модем подключен, то проверяем обновления
                 updater.updateFirmwareViaGPRS();
-                updateTimeoutPassed = false; // Сброс таймаута после обновления          
+                updateTimeoutPassed = false; // Сброс таймаута после обновления
+                lastUpdateCheck = millis();         
             } 
             break;
 
         case PRIORITY_WIFI_THEN_GPRS:
             if(WiFi.status() == WL_CONNECTED){
-                mqttWifiClient.loop(sensorData, receiveSensorData); // Обработка MQTT сообщений
+                mqttWifiClient.loop(sensorData, false);// receiveSensorData); // Обработка MQTT сообщений TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
                 if(updateTimeoutPassed) {
                     // Если WiFi подключен, то проверяем обновления
                     wifiUpdater.updateFirmware();
@@ -83,10 +93,12 @@ void TransmissionManager::loop() {
             }
             else {
                 simClient->loop();
+                simClient->transmitMqttData(sensorData, false);// receiveSensorData); // Отправка данных датчика через MQTT TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
                 if(simClient->isModemConnected() && updateTimeoutPassed) {
                     // Если модем подключен, то проверяем обновления
                     updater.updateFirmwareViaGPRS();
                     updateTimeoutPassed = false; // Сброс таймаута после обновления
+                    lastUpdateCheck = millis();
                 }                
             }
             break;

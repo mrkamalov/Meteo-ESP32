@@ -9,6 +9,7 @@
 #include "ServerSettings.h"
 #include "MqttWifiClient.h"
 #include "ModbusSensor.h"
+#include "PowerMonitor.h"
 
 class TransmissionManager {
 public:
@@ -27,6 +28,7 @@ private:
     WiFiUpdater wifiUpdater;
     Sim868Client* simClient;
     MqttWifiClient mqttWifiClient;
+    PowerMonitor powerMonitor;
     static const unsigned long UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 минут
     unsigned long lastUpdateCheck = 0; // Время последней проверки обновления
     bool updateTimeoutPassed = false; // Флаг для отслеживания таймаута

@@ -25,7 +25,7 @@
 // set GSM PIN, if any
 #define GSM_PIN ""
 // Set phone numbers, if you want to test SMS and Calls
-#define SMS_TARGET  "+77022384851"
+#define SMS_TARGET "*6914*1*1#900605050391" //"+77022384851" //22384851"
 #include <TinyGsmClient.h>
 #ifdef DUMP_AT_COMMANDS
 #include <StreamDebugger.h>
@@ -37,19 +37,33 @@ TinyGsm        modem(SerialAT);
 // Определите пины для подключения модема
 #define MODEM_RX 18
 #define MODEM_TX 17
-#define MODEM_POWER_PIN 8
+#define MODEM_GSM_EN_PIN 19
+#define MODEM_PWRKEY_PIN 37
+#define MODEM_STATUS_PIN 38
 
 void setup() {
   Serial.begin(115200);
-  delay(10);
-  // Включение питания модема
-  pinMode(MODEM_POWER_PIN, OUTPUT);
-  digitalWrite(MODEM_POWER_PIN, HIGH);
-  SerialMon.println("Wait...");
-
   // Set GSM module baud rate
   SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
-  delay(6000);
+  delay(10);
+  pinMode(MODEM_GSM_EN_PIN, OUTPUT);
+  digitalWrite(MODEM_GSM_EN_PIN, LOW);
+  delay(3200);
+  digitalWrite(MODEM_GSM_EN_PIN, HIGH);
+  SerialMon.println("Waiting for modem to power up...");
+  delay(500);
+  pinMode(MODEM_PWRKEY_PIN, OUTPUT);
+  digitalWrite(MODEM_PWRKEY_PIN, HIGH);
+  SerialMon.println("PWR KEY LOW");
+  delay(1500);  
+  digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
+  SerialMon.println("PWR KEY HIGH");
+  SerialMon.println("Wait...");
+  delay(2000);
+  pinMode(MODEM_STATUS_PIN, INPUT); // Set status pin as input
+  //read status pin
+  if (digitalRead(MODEM_STATUS_PIN) != HIGH) delay(2000);  
+  
   // Restart takes quite some time
   // To skip it, call init() instead of restart()
   DBG("Initializing modem...");
@@ -73,4 +87,11 @@ void loop() {
   #endif
   DBG("Delay 30 seconds...");
   delay(30000);
+  // while (Serial.available()) {
+  //       Serial1.write(Serial.read());
+  //   }    
+  //   // Передача из Serial1 в Serial
+  //   while (Serial1.available()) {
+  //       Serial.write(Serial1.read());
+  //   }
 }

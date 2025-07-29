@@ -28,3 +28,14 @@ pass
 ftps://couchuser3@ftpcouchdrop.couchdrop.io
 login couchuser3
 password z55RTVzgsps4P8q
+
+login couchuser4
+password z55RTVzgsps4P8q
+
+Telegram Eco Bot
+name: sergekEcoBot
+username: sergekEcoBot
+token:
+8227335448:AAE1u8sB7tDNIDPtasvnVEe1O6uRkYtB0NQ
+"id":8227335448
+

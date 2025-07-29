@@ -17,122 +17,166 @@ void sendAT(const String& command, uint32_t timeout = 2000) {
 }
 
 void setup() {
-    // Set console baud rate
-    Serial.begin(9600); 
-    SerialMon.begin(9600, SERIAL_8N1, 41, 42);  // RX=41, TX=42   
-    Serial1.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
-    //meteoPortal.begin();
-    //simUpdater.init();
-    //simClient.begin();  
-    // SerialMon.println("Starting Meteo Station...");
-    transmissionManager.begin();
+  // Set console baud rate
+  Serial.begin(9600); 
+  SerialMon.begin(9600, SERIAL_8N1, 41, 42);  // RX=41, TX=42   
+  Serial1.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
+  //meteoPortal.begin();
+  //simUpdater.init();
+  //simClient.begin();  
+  // SerialMon.println("Starting Meteo Station...");
 
-    // Включение питания модема
-    // pinMode(MODEM_GSM_EN_PIN, OUTPUT);    
-    // digitalWrite(MODEM_GSM_EN_PIN, HIGH);
-    // Serial.println("Waiting for modem to power up...");
-    // delay(2000);
-    // pinMode(MODEM_PWRKEY_PIN, OUTPUT);
-    // digitalWrite(MODEM_PWRKEY_PIN, HIGH);
-    // Serial.println("PWR KEY LOW");
-    // delay(2000);
-    // digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
-    // Serial.println("PWR KEY HIGH");
+  transmissionManager.begin();
 
-    // sendAT("AT");                  // Проверка связи
-    // sendAT("ATE0");                // Отключить эхо
-    // sendAT("AT+CPIN?");            // Проверка SIM-карты
-    // sendAT("AT+CSQ");              // Уровень сигнала
-    // sendAT("AT+CREG?");            // Регистрация в сети
-    // sendAT("AT+SAPBR=3,1,\"Contype\",\"GPRS\""); // Настройка типа соединения
-    // sendAT("AT+SAPBR=3,1,\"APN\",\"internet.altel.kz\"");  // Оператор
-    // sendAT("AT+SAPBR=1,1");        // Открыть соединение
-    // sendAT("AT+SAPBR=2,1");        // Получить информацию о соединении
+  //SET DEFAULT PIN function
+  // pinMode(SET_DEFAULTS_PIN, INPUT);  
 }
 
 void loop() {    
-    while (true) {
-        //delay(1000);
-        //if(simUpdater.checkForUpdates()) simUpdater.updateFirmwareViaGPRS();// Объединить в один метод
-        //meteoPortal.loop();
-        //simClient.loop();  
+  while (true) {
+    //delay(1000);
+    //if(simUpdater.checkForUpdates()) simUpdater.updateFirmwareViaGPRS();// Объединить в один метод
+    //meteoPortal.loop();
+    //simClient.loop();  
 
-        transmissionManager.loop();      
-    }  
+    transmissionManager.loop(); 
+
+    //SET DEFAULT PIN check
+    // delay(1000); // Задержка для предотвращения слишком частого цикла    
+    // int state = digitalRead(SET_DEFAULTS_PIN);  // читаем 0 или 1  
+    // if (state == HIGH) {
+    //   SerialMon.println("Вход ВКЛЮЧЕН (логическая 1)");
+    // } else {
+    //   SerialMon.println("Вход ВЫКЛЮЧЕН (логический 0)");
+    // }
+  }  
 }
 
 
-/*
-#include <WiFi.h>
-#include <AsyncTCP.h>
+// #include <WiFi.h>
+// #include <WiFiClientSecure.h>
+// #include <HTTPClient.h>
 
-#include <ESPAsyncWebServer.h>
-#include <ElegantOTA.h>
+// void checkExternalPower();
+// void sendPowerLossAlert();
+// void sendTelegramMessage(const String& message);
 
-const char* ssid = "SG_GUEST";
-const char* password = "";
+// const char* ssid = "SG_RND";
+// const char* password = "korkemwifi";
 
-AsyncWebServer server(80);
+// String telegramBotToken = "8227335448:AAE1u8sB7tDNIDPtasvnVEe1O6uRkYtB0NQ";
+// String chatId = "-4622112875"; // Ваш chat ID
+// WiFiClientSecure secured_client;
 
-unsigned long ota_progress_millis = 0;
+// // ==== Root CA для api.telegram.org ====
+// const char TELEGRAM_CERT[] PROGMEM = R"EOF(
+// -----BEGIN CERTIFICATE-----
+// MIIDxTCCAq2gAwIBAgIQRmU2ZBIykkBHzSm6mRypxzANBgkqhkiG9w0BAQsFADA/
+// MSQwIgYDVQQKExtEaWdpdGFsIFNpZ25hdHVyZSBUcnVzdCBDby4xGDAWBgNVBAMT
+// D1Jvb3QgQ0EgUm9vdCAtIEcyMB4XDTIwMDYyNTAwMDAwMFoXDTMwMDYyNDIzNTk1
+// OVowPzEkMCIGA1UEChMbRGlnaXRhbCBTaWduYXR1cmUgVHJ1c3QgQ28uMRgwFgYD
+// VQQDEw9Sb290IENBIFJvb3QgLSBHMjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCC
+// AQoCggEBAKypx2vwEjh23UNMpddT+2sW0kTLaCkqn5Z8S0S3Vfhz9R+oTBtC1c6C
+// GZnKr6KPyHOvW+IEdHTrnDUudY1zM04tWKh5+AqqcDKZykB1WUNvbxi5zsxgJK2/
+// g04QLjHqqE/5bN0msYAXIbFTleYhA7aMne9wuf3ls7n1FUyQrrKJmwhXWf3KTz1A
+// VyeC1VGKRDcrEX6FxN2dXrPYAz5+0I0z+od8k/RAOU/yU35g8sbQ0BYII40di6KI
+// vF/jbpDFH9zAyA+3gswHDb6uB2SVuOiG7csV0rOW7jQ+zY7K1o1uNpxvQiluzpXL
+// f75E+f4Z9M6dFbTD+kQoh9ev9X49wscCAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB
+// /zAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0OBBYEFNg+JNnx18t1pHABH6Y/2LG2F8qw
+// MA0GCSqGSIb3DQEBCwUAA4IBAQCZpEaj2lzF+enKnnOgzmIHmBd5dtn8rYJQ2v4f
+// C3y5KP8v8PZKxDSHLVYRIlnJrped1IovnHgwlHGawEq+y3OC/YLXTr4Wr9L5xRcm
+// F8UOB7hZPH/LW0OX2uUVksNzx8dx4qPuIgz8fcwTN82ZMKmDG4GJHzFg3Ajc6NNC
+// pUg/6QMQ6MCTQ2xwbGHptRNZB+Yh8Ejua+ZC3WnSNUFjL0kJ4kgE3AQUrdRr+88j
+// cZMcG2JSe2xJJHptNwacrkT4VLT2KT+6U6FqVuwZYaUysJ/k6FOLwObAHTkKQ+39
+// rMxuF8k+nMB0Igf4lhkSNuL6Q8v2sG9FL4+bQMbsQzH/66pF
+// -----END CERTIFICATE-----
+// )EOF";
 
-void onOTAStart() {
-  // Log when OTA has started
-  Serial.println("OTA update started!");
-  // <Add your own code here>
-}
+// // Пин для мониторинга питания
+// #define POWER_PIN 16
+// #define POWER_LOSS_THRESHOLD 1500  // мВ (ниже считаем что питание пропало)
 
-void onOTAProgress(size_t current, size_t final) {
-  // Log every 1 second
-  if (millis() - ota_progress_millis > 1000) {
-    ota_progress_millis = millis();
-    Serial.printf("OTA Progress Current: %u bytes, Final: %u bytes\n", current, final);
-  }
-}
+// bool powerLost = false;
+// bool prevPowerLost = false;
 
-void onOTAEnd(bool success) {
-  // Log when OTA has finished
-  if (success) {
-    Serial.println("OTA update finished successfully!");
-  } else {
-    Serial.println("There was an error during OTA update!");
-  }
-  // <Add your own code here>
-}
+// // === Инициализация ===
+// void setup() {
+//   Serial.begin(9600);//115200);
 
-void setup(void) {
-  Serial.begin(115200);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.println("");
+//   // ADC настройки
+//   analogSetAttenuation(ADC_11db);       // для измерения до ~3.3 В
+//   analogReadResolution(12);             // 0–4095
+//   pinMode(POWER_PIN, INPUT);
 
-  // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+//   // Подключение к WiFi
+//   WiFi.begin(ssid, password);
+//   Serial.print("Подключение к WiFi");
+//   while (WiFi.status() != WL_CONNECTED) {
+//     delay(500);
+//     Serial.print(".");
+//   }
+//   Serial.println("\nWiFi подключено!");
+//   Serial.print("IP: ");
+//   Serial.println(WiFi.localIP());
+// }
 
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", "Hi! This is ElegantOTA AsyncDemo.");
-  });
+// // === Основной цикл ===
+// void loop() {
+//   checkExternalPower();
+//   delay(2000);  // проверка каждые 2 сек
+// }
 
-  ElegantOTA.begin(&server);    // Start ElegantOTA
-  // ElegantOTA callbacks
-  ElegantOTA.onStart(onOTAStart);
-  ElegantOTA.onProgress(onOTAProgress);
-  ElegantOTA.onEnd(onOTAEnd);
+// // === Проверка внешнего питания ===
+// void checkExternalPower() {
+//   static unsigned long powerLossTime = 0;
+//   int raw = analogRead(POWER_PIN);
+//   float voltage = (raw / 4095.0) * 3300; // мВ
+//   Serial.printf("Напряжение на IO16: %.2f мВ\n", voltage);
+//   if(powerLost){    
+//     Serial.println("Время работы без питания (мс): " + String(millis()-powerLossTime));
+//   }
 
-  server.begin();
-  Serial.println("HTTP server started");
-}
+//   prevPowerLost = powerLost;
+//   powerLost = voltage < POWER_LOSS_THRESHOLD;
 
-void loop(void) {
-  ElegantOTA.loop();
-}
+//   if (powerLost && !prevPowerLost) {
+//     Serial.println("⚠️ Обнаружено пропадание внешнего питания!");
+//     powerLossTime = millis(); // Запоминаем время потери питания
+//     sendPowerLossAlert();
+//   } else if (!powerLost && prevPowerLost) {
+//     Serial.println("✅ Внешнее питание восстановлено.");
+//   }
+// }
 
-*/
+// // === Отправка уведомления в Telegram ===
+// void sendPowerLossAlert() {
+//   String message = "⚠️ Обнаружено пропадание внешнего питания устройства!";
+//   sendTelegramMessage(message);
+// }
+
+// void sendTelegramMessage(const String& message) {
+//   if (WiFi.status() != WL_CONNECTED) {
+//     Serial.println("WiFi не подключен. Не удалось отправить сообщение.");
+//     return;
+//   }
+//   secured_client.setCACert(TELEGRAM_CERT);
+
+//   HTTPClient http;
+//   String url = "https://api.telegram.org/bot" + telegramBotToken + "/sendMessage";
+
+//   http.begin(url);
+//   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+//   String body = "chat_id=" + chatId + "&text=" + message;
+//   int httpResponseCode = http.POST(body);
+
+//   if (httpResponseCode > 0) {
+//     String response = http.getString();
+//     Serial.println("Сообщение отправлено:");
+//     Serial.println(response);
+//   } else {
+//     Serial.printf("Ошибка при отправке: %d\n", httpResponseCode);
+//   }
+
+//   http.end();
+// }
