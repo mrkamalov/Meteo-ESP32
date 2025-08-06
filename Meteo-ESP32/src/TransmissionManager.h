@@ -30,9 +30,11 @@ private:
     MqttWifiClient mqttWifiClient;
     PowerMonitor powerMonitor;
     static const unsigned long UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 минут
+    static const unsigned long GPRS_UPDATE_CHECK_INTERVAL_MS = 30*1000;//1 * 60 * 1000; // 1 минута TODO: Вернуть на 1 минуту
     unsigned long lastUpdateCheck = 0; // Время последней проверки обновления
-    bool updateTimeoutPassed = false; // Флаг для отслеживания таймаута
-    bool firstUpdateCheckDone = false;
+    bool updateTimeoutPassed = true; // Флаг для отслеживания таймаута    
+    unsigned long gprsLastUpdateCheck = 0; // Время последней проверки обновления для GPRS
+    bool gprsUpdateTimeoutPassed = true; // Флаг для отслеживания таймаута GPRS    
     char _mqttServer[64];
     uint16_t _mqttPort;
     char _mqttUser[32];

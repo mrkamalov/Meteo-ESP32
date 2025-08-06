@@ -18,17 +18,19 @@ private:
     void sendCommand(const String& command, int delayMs = 500);
     bool waitForResponse(const String& expected, int timeout);
     //bool downloadFirmware();
-    bool downloadFileFromFtp(const String& remoteFilename, bool appendMode, int partSize, bool isLastPart);
+    bool downloadFileFromFtp(const String& remoteFilename, int partSize, bool isLastPart);
     //bool downloadFileFromFTP(const String& url, const char* path);
-    bool fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int& partsCount, int& partSize);    
+    bool fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int &partsCount, int &partSize);
     String readLocalVersion();
     void saveVersionToEEPROM(const String& version);    
     bool checkForUpdates(String &version, uint32_t &remoteCRC, int& partsCount, int& partSize);
-    bool isValidVersionFormat(const String& version);    
+    bool isValidVersionFormat(const String& version);
+    bool mergeFirmwareParts(int totalParts, const char *outputFile);  
 
     char FTP_SERVER[32] = {0};
     char FTP_USER[32] = {0};
     char FTP_PASS[32] = {0};
+    
 
     // Внутреннее состояние загрузки
     enum UpdateState {
@@ -47,7 +49,9 @@ private:
     int fwParts = 0;
     int fwPartSize = 0;
     int currentPart = 0;
-    bool appendMode = false;
+    #define MAX_PARTS 40 // Максимальное количество частей    
+    uint32_t partCRCs[MAX_PARTS] = {0}; // Массив для хранения CRC частей прошивки
+    int downloadAttempts = 0; // Счетчик попыток загрузки
 };
 
 #endif

@@ -4,9 +4,12 @@
 #include "ExtendedHttpClient.h"
 
 // Определите пины для подключения модема
+#define MODEM_POWER_PIN 8
 #define MODEM_RX 18
 #define MODEM_TX 17
-#define MODEM_POWER_PIN 8
+#define MODEM_GSM_EN_PIN 19
+#define MODEM_PWRKEY_PIN 37
+#define MODEM_STATUS_PIN 38
 // Select your modem:
 #define TINY_GSM_MODEM_SIM800
 // Set serial for debug console (to the Serial Monitor, default speed 115200)
@@ -69,7 +72,24 @@ void initGSMModem()
   // Включение питания модема
   pinMode(MODEM_POWER_PIN, OUTPUT);
   digitalWrite(MODEM_POWER_PIN, HIGH);
-  SerialMon.println("Wait...");
+  SerialMon.println("Modem power up delay");  
+  // pinMode(MODEM_GSM_EN_PIN, OUTPUT);
+  // digitalWrite(MODEM_GSM_EN_PIN, LOW);
+  // delay(3200);
+  // digitalWrite(MODEM_GSM_EN_PIN, HIGH);
+  // SerialMon.println("Waiting for modem to power up...");
+  // delay(500);
+  // pinMode(MODEM_PWRKEY_PIN, OUTPUT);
+  // digitalWrite(MODEM_PWRKEY_PIN, HIGH);
+  // SerialMon.println("PWR KEY LOW");
+  // delay(1500);  
+  // digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
+  // SerialMon.println("PWR KEY HIGH");
+  // SerialMon.println("Wait...");
+  // delay(2000);
+  // pinMode(MODEM_STATUS_PIN, INPUT); // Set status pin as input
+  // //read status pin
+  // if (digitalRead(MODEM_STATUS_PIN) != HIGH) delay(2000);
 
   // Set GSM module baud rate
   SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);

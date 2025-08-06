@@ -53,14 +53,13 @@ void TransmissionManager::loop() {
     String sensorJson = getSensorDataJson();
     meteoPortal.loop(sensorJson);
 
-    if((millis() - lastUpdateCheck) > UPDATE_CHECK_INTERVAL_MS) {// TODO: Сделать отдельные таймауты для wifi и gprs
+    if((millis() - lastUpdateCheck) > UPDATE_CHECK_INTERVAL_MS) {
         updateTimeoutPassed = true;
         lastUpdateCheck = millis();
     }
-    if(!firstUpdateCheckDone) {
-        updateTimeoutPassed = true;
-        firstUpdateCheckDone = true;
-    }
+    if((millis() - gprsLastUpdateCheck) > GPRS_UPDATE_CHECK_INTERVAL_MS) {
+        gprsUpdateTimeoutPassed = true;
+    }    
     switch (currentPriority) {
         case PRIORITY_WIFI_ONLY:
             mqttWifiClient.loop(sensorData, false); //receiveSensorData); // Обработка MQTT сообщений mytest TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
@@ -74,11 +73,11 @@ void TransmissionManager::loop() {
         case PRIORITY_GPRS_ONLY:
             simClient->loop();
             simClient->transmitMqttData(sensorData, false);// receiveSensorData); // Отправка данных датчика через MQTT TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
-            if(simClient->isModemConnected() && updateTimeoutPassed) {
+            if(simClient->isModemConnected() && gprsUpdateTimeoutPassed) {
                 // Если модем подключен, то проверяем обновления
                 updater.updateFirmwareViaGPRS();
-                updateTimeoutPassed = false; // Сброс таймаута после обновления
-                lastUpdateCheck = millis();         
+                gprsUpdateTimeoutPassed = false; // Сброс таймаута после обновления
+                gprsLastUpdateCheck = millis();         
             } 
             break;
 
@@ -94,11 +93,11 @@ void TransmissionManager::loop() {
             else {
                 simClient->loop();
                 simClient->transmitMqttData(sensorData, false);// receiveSensorData); // Отправка данных датчика через MQTT TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
-                if(simClient->isModemConnected() && updateTimeoutPassed) {
+                if(simClient->isModemConnected() && gprsUpdateTimeoutPassed) {
                     // Если модем подключен, то проверяем обновления
                     updater.updateFirmwareViaGPRS();
-                    updateTimeoutPassed = false; // Сброс таймаута после обновления
-                    lastUpdateCheck = millis();
+                    gprsUpdateTimeoutPassed = false; // Сброс таймаута после обновления
+                    gprsLastUpdateCheck = millis();
                 }                
             }
             break;

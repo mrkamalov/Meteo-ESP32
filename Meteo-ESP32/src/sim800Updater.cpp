@@ -7,6 +7,7 @@
 #include "CRC32Utils.h"
 #include "ServerSettings.h"
 #include "SerialMon.h"
+#include <vector>
 
 Sim800Updater::Sim800Updater(){}
 
@@ -129,8 +130,8 @@ bool Sim800Updater::initSpiffs() {
     }
 }
 
-bool Sim800Updater::downloadFileFromFtp(const String& remoteFilename, bool appendMode, int partSize, bool isLastPart) {// TODO: Test FTP download
-    File file = SPIFFS.open(LOCAL_FILE, appendMode ? FILE_APPEND : FILE_WRITE);    
+bool Sim800Updater::downloadFileFromFtp(const String& remoteFilename, int partSize, bool isLastPart) {// TODO: Test FTP download
+    File file = SPIFFS.open("/"+remoteFilename, FILE_WRITE);    
     if (!file) {
         SerialMon.println("Failed to open file for writing");
         return false;
@@ -145,7 +146,7 @@ bool Sim800Updater::downloadFileFromFtp(const String& remoteFilename, bool appen
     sendCommand("AT+FTPGETNAME=\"" + remoteFilename + "\"");
     sendCommand("AT+FTPGETPATH=\"/\"");
     sendCommand("AT+FTPGET=1");  // Начинаем загрузку файла
-    SerialMon.printf("Starting download %s from FTP server: %s\n", remoteFilename.c_str());
+    SerialMon.printf("Starting download %s from FTP server\n", remoteFilename.c_str());
     isLastPart? SerialMon.println("Last part of the file") : SerialMon.printf("Part size: %d bytes\n", partSize);
     // Ожидание подтверждения от модема
     delay(5000);
@@ -227,6 +228,56 @@ bool Sim800Updater::downloadFileFromFtp(const String& remoteFilename, bool appen
 //     return true;
 // }
 
+bool Sim800Updater::mergeFirmwareParts(int totalParts, const char *outputFile) {
+    File outFile = SPIFFS.open(outputFile, FILE_WRITE);
+    if (!outFile) {
+        SerialMon.printf("Ошибка: не удалось создать %s\n", outputFile);
+        return false;
+    }
+
+    const size_t bufSize = 1024;
+    uint8_t buf[bufSize];
+
+    for (int i = 0; i < totalParts; i++) {
+        char partName[32];
+        sprintf(partName, "/firmware_part%03d.bin", i);
+
+        if (!SPIFFS.exists(partName)) {
+            SerialMon.printf("Часть %s не найдена\n", partName);
+            outFile.close();
+            return false;
+        }
+
+        File partFile = SPIFFS.open(partName, FILE_READ);
+        if (!partFile) {
+            SerialMon.printf("Не удалось открыть часть %s\n", partName);
+            outFile.close();
+            return false;
+        }
+
+        SerialMon.printf("Объединение части %d: %s\n", i, partName);
+
+        // копирование содержимого в firmware.bin
+        while (partFile.available()) {
+            size_t bytesRead = partFile.read(buf, bufSize);
+            outFile.write(buf, bytesRead);
+        }
+
+        partFile.close();
+
+        // удаление части после записи
+        if (!SPIFFS.remove(partName)) {
+            SerialMon.printf("Не удалось удалить часть %s\n", partName);
+        } else {
+            SerialMon.printf("Удалена часть %s\n", partName);
+        }
+    }
+
+    outFile.close();
+    SerialMon.printf("Файл прошивки %s успешно создан\n", outputFile);
+    return true;
+}
+
 void Sim800Updater::updateFirmwareViaGPRS() {
     switch (updateState) {
         case IDLE:
@@ -236,7 +287,7 @@ void Sim800Updater::updateFirmwareViaGPRS() {
             fwParts = 0;
             fwPartSize = 0;
             currentPart = 0;
-            appendMode = false;            
+            downloadAttempts = 0;          
             updateState = LOAD_CONFIG_INITIAL;
             break;
 
@@ -277,17 +328,29 @@ void Sim800Updater::updateFirmwareViaGPRS() {
             sprintf(partName, "firmware_part%03d.bin", currentPart);
             SerialMon.printf("Загрузка части %d: %s\n", currentPart, partName);
 
-            if (!downloadFileFromFtp(partName, appendMode, fwPartSize, (currentPart == fwParts - 1))) {
+            if (!downloadFileFromFtp(partName, fwPartSize, (currentPart == fwParts - 1))) {
                 SerialMon.printf("Ошибка загрузки части %d\n", currentPart);
                 updateState = IDLE;
                 break;
             }
-
-            currentPart++;
-            appendMode = true;
-            if (currentPart >= fwParts) {
-                updateState = VERIFY_CRC;
+            uint32_t fileCRC = calculateFileCRC32(("/" + String(partName)).c_str());
+            SerialMon.printf("CRC части %d: 0x%08X\n", currentPart, fileCRC);
+            if(fileCRC != partCRCs[currentPart]) {
+                SerialMon.printf("Ошибка: CRC части %d не совпадает! Ожидалось: 0x%08X, получено: 0x%08X\n",
+                                 currentPart, partCRCs[currentPart], fileCRC);
+                downloadAttempts++;
+                if(downloadAttempts>5) updateState = IDLE;
                 break;
+            }
+            else currentPart++;            
+            if (currentPart >= fwParts) {
+                if (mergeFirmwareParts(fwParts, "/firmware.bin")) {
+                    SerialMon.println("Все части объединены в firmware.bin");
+                    updateState = VERIFY_CRC;
+                } else {
+                    SerialMon.println("Ошибка при объединении частей");
+                    updateState = IDLE;
+                }                
             }
             break;
         }
@@ -353,93 +416,119 @@ void Sim800Updater::saveVersionToEEPROM(const String& version) {
     SerialMon.println("Версия прошивки сохранена в EEPROM");
 }
 
-bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int& partsCount, int& partSize) {
-    SerialMon.println("Загрузка версии из FTP...");
+bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int &partsCount, int &partSize) {
+    SerialMon.println("Загрузка config.txt из FTP...");
 
+    // Настройка FTP
     sendCommand("AT+FTPCID=1");
     sendCommand("AT+FTPSERV=\"" + String(FTP_SERVER) + "\"");
     sendCommand("AT+FTPUN=\"" + String(FTP_USER) + "\"");
     sendCommand("AT+FTPPW=\"" + String(FTP_PASS) + "\"");
-    sendCommand("AT+FTPTYPE=A");  // Текстовый режим
+    sendCommand("AT+FTPTYPE=A");  // текстовый режим
     sendCommand("AT+FTPGETNAME=\"config.txt\"");
     sendCommand("AT+FTPGETPATH=\"/\"");
 
+    // Запрос файла
     sendCommand("AT+FTPGET=1");
     delay(3000);
-    waitForResponse("+FTPGET: 1,1", 10000);
-
-    String response = "";
-    delay(300);
-    SerialAT.println("AT+FTPGET=2,256");        
-    delay(300);
-    while (SerialAT.available()) {
-        response += (char)SerialAT.read();
+    if (!waitForResponse("+FTPGET: 1,1", 10000)) {
+        SerialMon.println("Ошибка получения config.txt");
+        return false;
     }
+
+    String response;
+    // Чтение блоками
+    while (true) {
+        SerialAT.println("AT+FTPGET=2,512");
+        delay(500);
+        String chunk;
+        while (SerialAT.available()) {
+            chunk += (char)SerialAT.read();
+        }
+        if (chunk.length() == 0) break; // данные закончились
+        response += chunk;
+        if (chunk.indexOf("+FTPGET: 2,0") != -1) break; // конец файла
+    }
+
+    SerialMon.println("Получен config.txt:");
     SerialMon.println(response);
 
-    // Парсинг строки
-    int dataStart = response.indexOf("+FTPGET: 2,");
-    if (dataStart == -1) return false;
+    // Извлекаем первую строку
+    int pos = response.indexOf("\r\n");
+    if (pos == -1) {
+        SerialMon.println("Не найдена первая строка.");
+        return false;
+    }
 
-    int crlf = response.indexOf("\r\n", dataStart);
-    if (crlf == -1) return false;
+    String firstLine = response.substring(0, pos);
+    firstLine.trim();
 
-    int dataBegin = crlf + 2;
-    int dataEnd = response.indexOf("\r\n", dataBegin);
-    if (dataEnd == -1) return false;
+    // Парсим первую строку: VERSION CRC PARTS PARTSIZE
+    int sep1 = firstLine.indexOf(' ');
+    int sep2 = firstLine.indexOf(' ', sep1 + 1);
+    int sep3 = firstLine.indexOf(' ', sep2 + 1);
+    if (sep1 == -1 || sep2 == -1 || sep3 == -1) {
+        SerialMon.println("Неверный формат первой строки.");
+        return false;
+    }
 
-    String line = response.substring(dataBegin, dataEnd);
-    line.trim();
-    SerialMon.print("Строка конфигурации: ");
-    SerialMon.println(line);
+    version = firstLine.substring(0, sep1);
+    String crcStr = firstLine.substring(sep1 + 1, sep2);
+    String partsCountStr = firstLine.substring(sep2 + 1, sep3);
+    String partSizeStr = firstLine.substring(sep3 + 1);
 
-    // Ожидаем формат: "1.0.0 CRC32_HEX PARTS_COUNT PART_SIZE"
-    int sep1 = line.indexOf(' ');
-    if (sep1 == -1) return false;
-
-    int sep2 = line.indexOf(' ', sep1 + 1);
-    if (sep2 == -1) return false;
-
-    int sep3 = line.indexOf(' ', sep2 + 1);
-    if (sep3 == -1) return false;
-
-    version = line.substring(0, sep1);
-    String crcStr = line.substring(sep1 + 1, sep2);
-    String partsCountStr = line.substring(sep2 + 1, sep3);
-    String partSizeStr = line.substring(sep3 + 1);
-
-    // Проверка формата версии
     if (!isValidVersionFormat(version)) {
         SerialMon.printf("Invalid version format: %s\n", version.c_str());
         return false;
     }
 
-    // CRC в hex формате
     remoteCRC = (uint32_t)strtoul(crcStr.c_str(), nullptr, 16);
-    if (remoteCRC == 0) {
-        SerialMon.println("Некорректный CRC.");
-        return false;
-    }
-
-    // Количество частей
     partsCount = partsCountStr.toInt();
-    if (partsCount <= 0) {
-        SerialMon.println("Некорректное количество частей.");
-        return false;
-    }
-
-    // Размер одной части
     partSize = partSizeStr.toInt();
-    if (partSize <= 0) {
-        SerialMon.println("Некорректный размер части.");
+
+    if (remoteCRC == 0 || partsCount <= 0 || partSize <= 0) {
+        SerialMon.println("Некорректные значения в первой строке.");
         return false;
     }
 
-    // Закрытие FTP-сессии
+    if (partsCount > MAX_PARTS) {
+        SerialMon.printf("Ошибка: частей (%d) больше MAX_PARTS (%d)\n", partsCount, MAX_PARTS);
+        return false;
+    }
+
+    // Разбор CRC частей
+    int lineStart = pos;
+    int idx = 0;
+    while (idx < partsCount) {
+        int nextStart = response.indexOf("\r\n", lineStart + 2);
+        if (nextStart == -1) break;
+
+        String crcLine = response.substring(lineStart + 2, nextStart);
+        crcLine.trim();
+        if (crcLine.length() > 0) {
+            uint32_t partCrc = (uint32_t)strtoul(crcLine.c_str(), nullptr, 16);
+            partCRCs[idx++] = partCrc;
+        }
+        lineStart = nextStart;
+    }
+
+    if (idx != partsCount) {
+        SerialMon.printf("Предупреждение: ожидается %d CRC, получено %d\n", partsCount, idx);
+        partsCount = idx; // подправим
+    }
+
+    // Закрытие FTP
     sendCommand("AT+FTPQUIT", 3000);
-    SerialMon.printf("Версия: %s, CRC: %08X, Parts: %d\n", version.c_str(), remoteCRC, partsCount);  
+
+    SerialMon.printf("Версия: %s, CRC файла: %08X, Частей: %d, Размер: %d\n",
+                     version.c_str(), remoteCRC, partsCount, partSize);
+    for (int i = 0; i < partsCount; i++) {
+        SerialMon.printf("CRC части %d: %08X\n", i, partCRCs[i]);
+    }
+
     return true;
 }
+
 
 bool Sim800Updater::isValidVersionFormat(const String& version) {
     int dot1 = version.indexOf('.');

@@ -33,7 +33,7 @@ void setup() {
   // Serial.print(heap_caps_get_largest_free_block(0));
   // Serial.println(" байт");
   // Initialize SPIFFS
-  if (!initSPIFFS()) return;
+  // if (!initSPIFFS()) return;
 
   initGSMModem();
 }

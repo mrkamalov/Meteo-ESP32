@@ -472,7 +472,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     </script>
 </head>
 <body>
-    <h1>Meteo Config</h1>
+    <h1>Meteo Config v1.1.0</h1>
     <pre id="deviceList"></pre>
     <input id="id" placeholder="ID">
     <input id="name" placeholder="Name">

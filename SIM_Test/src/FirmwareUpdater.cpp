@@ -139,38 +139,38 @@ void performFirmwareUpdate(void){
     getConfigData(partsCount, crc, totalSize, partsSize);
     Serial.printf("Total parts: %d, CRC: 0x%08X, Total size: %u bytes Parts size: %u\n", 
                 partsCount, crc, totalSize, partsSize);    
-    for (int partNum = 0; partNum < partsCount; partNum++) {
-        char partNumberString[4];
-        snprintf(partNumberString, sizeof(partNumberString), "%03d", partNum);
-        String firmwarePath = firmware_catalog_path+String(partNumberString)+".bin";
-        File firmwareFile = SPIFFS.open(firmwarePath, FILE_WRITE);
-        if (!firmwareFile) {  
-            Serial.println("Error opening firmware file.");
-            return;
-        }
-        if(loadFirmwarePart(partNum, firmwareFile)) Serial.println("Firmware part loaded to SPIFFS.");
-        else {
-            Serial.println("Error loading firmware part.");
-            firmwareFile.close();
-            return;
-        }
-        #error "Add reload and check parts already loaded"
-        if(!checkFirmwarePartSize(firmwareFile, partsSize)) {partNum--; delay(1000); continue;}
-        firmwareFile.close();
-        verifyFirmwareChecksum(crc, 20480, firmwarePath);   
-    }    
-    // Verify checksum
-    if (verifyFirmwareChecksum(crc, totalSize, firmware_catalog_path+"/firmware.bin")) {
-        Serial.println("Firmware checksum is valid.");
+    // for (int partNum = 0; partNum < partsCount; partNum++) {
+    //     char partNumberString[4];
+    //     snprintf(partNumberString, sizeof(partNumberString), "%03d", partNum);
+    //     String firmwarePath = firmware_catalog_path+String(partNumberString)+".bin";
+    //     File firmwareFile = SPIFFS.open(firmwarePath, FILE_WRITE);
+    //     if (!firmwareFile) {  
+    //         Serial.println("Error opening firmware file.");
+    //         return;
+    //     }
+    //     if(loadFirmwarePart(partNum, firmwareFile)) Serial.println("Firmware part loaded to SPIFFS.");
+    //     else {
+    //         Serial.println("Error loading firmware part.");
+    //         firmwareFile.close();
+    //         return;
+    //     }
+    //     #error "Add reload and check parts already loaded"
+    //     if(!checkFirmwarePartSize(firmwareFile, partsSize)) {partNum--; delay(1000); continue;}
+    //     firmwareFile.close();
+    //     verifyFirmwareChecksum(crc, 20480, firmwarePath);   
+    // }    
+    // // Verify checksum
+    // if (verifyFirmwareChecksum(crc, totalSize, firmware_catalog_path+"/firmware.bin")) {
+    //     Serial.println("Firmware checksum is valid.");
 
-        // Write firmware to OTA and update
-        if (writeFirmwareToOTA(firmware_catalog_path+"/firmware.bin")) {
-            Serial.println("Firmware updated successfully. Restarting...");
-            ESP.restart();
-        } else {
-            Serial.println("Firmware update failed.");
-        }
-    } else {
-        Serial.println("Error: checksum mismatch.");
-    }
+    //     // Write firmware to OTA and update
+    //     if (writeFirmwareToOTA(firmware_catalog_path+"/firmware.bin")) {
+    //         Serial.println("Firmware updated successfully. Restarting...");
+    //         ESP.restart();
+    //     } else {
+    //         Serial.println("Firmware update failed.");
+    //     }
+    // } else {
+    //     Serial.println("Error: checksum mismatch.");
+    // }
 }

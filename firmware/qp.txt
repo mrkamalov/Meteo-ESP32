@@ -32,6 +32,9 @@ password z55RTVzgsps4P8q
 login couchuser4
 password z55RTVzgsps4P8q
 
+login couchuser5
+password !3dSn5JwJNH5W4Q
+
 Telegram Eco Bot
 name: sergekEcoBot
 username: sergekEcoBot

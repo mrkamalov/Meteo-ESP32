@@ -6,6 +6,15 @@
 #define MODEM_TX 17
 #define MODEM_GSM_EN_PIN 19
 #define MODEM_PWRKEY_PIN 37
+#define MODEM_STATUS_PIN 38
+
+// Select your modem:
+#define TINY_GSM_MODEM_SIM800
+// Set serial for debug console (to the Serial Monitor, default speed 115200)
+#define SerialMon Serial
+#define SerialAT Serial1
+// Define the serial console for debug prints, if needed
+#define TINY_GSM_DEBUG SerialMon
 
 const char* FTP_SERVER = "ftp.drivehq.com";
 const char* FTP_USER = "MeteoESP";
@@ -42,23 +51,30 @@ void waitForResponse(const String& expectedResponse, int timeout = 5000) {
 
 void setup() {
     // Set console baud rate
-    Serial.begin(115200);
+    Serial.begin(921600);//115200);
     
     // Включение питания модема
-    pinMode(MODEM_GSM_EN_PIN, OUTPUT);    
-    digitalWrite(MODEM_GSM_EN_PIN, HIGH);
-    Serial.println("Waiting for modem to power up...");
-    delay(2000);
-    pinMode(MODEM_PWRKEY_PIN, OUTPUT);
-    digitalWrite(MODEM_PWRKEY_PIN, HIGH);
-    Serial.println("PWR KEY LOW");
-    delay(2000);
-    digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
-    Serial.println("PWR KEY HIGH");
+  SerialMon.println("Modem power up delay");  
+  pinMode(MODEM_GSM_EN_PIN, OUTPUT);
+  digitalWrite(MODEM_GSM_EN_PIN, LOW);
+  delay(3200);
+  digitalWrite(MODEM_GSM_EN_PIN, HIGH);
+  SerialMon.println("Waiting for modem to power up...");
+  delay(500);
+  pinMode(MODEM_PWRKEY_PIN, OUTPUT);
+  digitalWrite(MODEM_PWRKEY_PIN, HIGH);
+  SerialMon.println("PWR KEY LOW");
+  delay(1500);  
+  digitalWrite(MODEM_PWRKEY_PIN, LOW);  // Включаем питание модема
+  SerialMon.println("PWR KEY HIGH");
+  SerialMon.println("Wait...");
+  delay(2000);
+  pinMode(MODEM_STATUS_PIN, INPUT); // Set status pin as input
+  //read status pin
+  if (digitalRead(MODEM_STATUS_PIN) != HIGH) delay(2000);
 
     // Set GSM module baud rate
-    Serial1.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
-    delay(6000);    
+    Serial1.begin(921600);//, SERIAL_8N1, MODEM_RX, MODEM_TX);    //115200
 }
 
 void loop() {    

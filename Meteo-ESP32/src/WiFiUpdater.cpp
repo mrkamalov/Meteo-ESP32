@@ -148,6 +148,8 @@ bool WiFiUpdater::downloadFile(const String& url, const char* path) {
     SerialMon.printf("File size: %d bytes\n", totalLength);
     WiFiClient* stream = http.getStreamPtr();
     uint8_t buf[128];
+    int lastPercent = -1; // для контроля, чтобы не спамить выводом
+    SerialMon.println("Starting download firmware");
     while(http.connected() && (len > 0 || len == -1)) {
         // get available data size
         size_t size = stream->available();
@@ -160,10 +162,18 @@ bool WiFiUpdater::downloadFile(const String& url, const char* path) {
             if(len > 0) {
                 len -= c;
             }
+            // вычисляем процент
+            if (totalLength > 0) {
+                int percent = (bytesRead * 100) / totalLength;
+                if (percent != lastPercent) {
+                    SerialMon.printf("\rProgress: %d%%", percent);
+                    lastPercent = percent;
+                }
+            }
         }
         delay(1);
     }    
-    SerialMon.printf("Downloaded %d bytes\n", bytesRead);
+    SerialMon.printf("\nDownloaded %d bytes\n", bytesRead);
     file.close();
     http.end();
     return true;
