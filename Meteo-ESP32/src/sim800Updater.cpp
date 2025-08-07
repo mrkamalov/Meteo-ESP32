@@ -428,30 +428,20 @@ bool Sim800Updater::fetchConfigFromFTP(String &config) {
     sendCommand("AT+FTPGETPATH=\"/\"");
     // Запрос файла
     sendCommand("AT+FTPGET=1");
-    delay(5000);
-    if (!waitForResponse("+FTPGET: 1,1", 10000)) {
-        SerialMon.println("Ошибка получения config.txt");
-        return false;
-    }
+    delay(3000);
+    waitForResponse("+FTPGET: 1,1", 10000);    
+    delay(300);
+    SerialAT.println("AT+FTPGET=2,512");        
+    delay(300);
     config = "";
-    // Чтение блоками
-    while (true) {
-        SerialAT.println("AT+FTPGET=2,512");
-        delay(500);
-
-        String chunk;
-        while (SerialAT.available()) {
-            chunk += (char)SerialAT.read();
-        }
-        if (chunk.length() == 0) break;
-
-        config += chunk;
-        if (chunk.indexOf("+FTPGET: 2,0") != -1) break;
+    while (SerialAT.available()) {
+        config += (char)SerialAT.read();
     }
-
     SerialMon.println("Получен config.txt:");
     SerialMon.println(config);
     SerialMon.println("Обработка содержимого...");
+    // Закрытие FTP-сессии
+    sendCommand("AT+FTPQUIT", 3000);
     return true;
 
     // // Удалим строки служебного вида: "+FTPGET: 2,x" и "OK"
