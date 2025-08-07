@@ -416,9 +416,8 @@ void Sim800Updater::saveVersionToEEPROM(const String& version) {
     SerialMon.println("Версия прошивки сохранена в EEPROM");
 }
 
-bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int &partsCount, int &partSize) {
+bool Sim800Updater::fetchConfigFromFTP(String &config) {
     SerialMon.println("Загрузка config.txt из FTP...");
-
     // Настройка FTP
     sendCommand("AT+FTPCID=1");
     sendCommand("AT+FTPSERV=\"" + String(FTP_SERVER) + "\"");
@@ -427,7 +426,6 @@ bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int
     sendCommand("AT+FTPTYPE=A");  // текстовый режим
     sendCommand("AT+FTPGETNAME=\"config.txt\"");
     sendCommand("AT+FTPGETPATH=\"/\"");
-
     // Запрос файла
     sendCommand("AT+FTPGET=1");
     delay(5000);
@@ -435,118 +433,119 @@ bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int
         SerialMon.println("Ошибка получения config.txt");
         return false;
     }
-
-    String response;
+    config = "";
     // Чтение блоками
     while (true) {
         SerialAT.println("AT+FTPGET=2,512");
         delay(500);
+
         String chunk;
         while (SerialAT.available()) {
             chunk += (char)SerialAT.read();
         }
-        if (chunk.length() == 0) break; // данные закончились
-        response += chunk;
-        if (chunk.indexOf("+FTPGET: 2,0") != -1) break; // конец файла
+        if (chunk.length() == 0) break;
+
+        config += chunk;
+        if (chunk.indexOf("+FTPGET: 2,0") != -1) break;
     }
 
     SerialMon.println("Получен config.txt:");
-    SerialMon.println(response);
-    SerialMon.println("Обработка первой строки...");
-
-    // Извлекаем первую строку с полезными данными (пропускаем служебные строки)
-    int lineStart = 0;
-    String firstLine;
-
-    while (true) {
-        int lineEnd = response.indexOf("\r\n", lineStart);
-        if (lineEnd == -1) break;
-
-        firstLine = response.substring(lineStart, lineEnd);
-        firstLine.trim();
-
-        // Пропустить служебные строки и пустые
-        if (firstLine.length() > 0 && !firstLine.startsWith("+FTPGET:") && !firstLine.startsWith("OK")) {
-            break;
-        }
-
-        lineStart = lineEnd + 2; // Переход на следующую строку
-    }
-
-    if (firstLine.length() == 0) {
-        SerialMon.println("Не найдена первая строка с данными.");
-        return false;
-    }
-
-    SerialMon.println("Найдена первая строка:");
-    SerialMon.println(firstLine);
-
-    // Парсим первую строку: VERSION CRC PARTS PARTSIZE
-    int sep1 = firstLine.indexOf(' ');
-    int sep2 = firstLine.indexOf(' ', sep1 + 1);
-    int sep3 = firstLine.indexOf(' ', sep2 + 1);
-    if (sep1 == -1 || sep2 == -1 || sep3 == -1) {
-        SerialMon.println("Неверный формат первой строки.");
-        return false;
-    }
-
-    version = firstLine.substring(0, sep1);
-    String crcStr = firstLine.substring(sep1 + 1, sep2);
-    String partsCountStr = firstLine.substring(sep2 + 1, sep3);
-    String partSizeStr = firstLine.substring(sep3 + 1);
-
-    if (!isValidVersionFormat(version)) {
-        SerialMon.printf("Invalid version format: %s\n", version.c_str());
-        return false;
-    }
-
-    remoteCRC = (uint32_t)strtoul(crcStr.c_str(), nullptr, 16);
-    partsCount = partsCountStr.toInt();
-    partSize = partSizeStr.toInt();
-
-    if (remoteCRC == 0 || partsCount <= 0 || partSize <= 0) {
-        SerialMon.println("Некорректные значения в первой строке.");
-        return false;
-    }
-
-    if (partsCount > MAX_PARTS) {
-        SerialMon.printf("Ошибка: частей (%d) больше MAX_PARTS (%d)\n", partsCount, MAX_PARTS);
-        return false;
-    }
-
-    // Разбор CRC частей
-    int lineStart = pos;
-    int idx = 0;
-    while (idx < partsCount) {
-        int nextStart = response.indexOf("\r\n", lineStart + 2);
-        if (nextStart == -1) break;
-
-        String crcLine = response.substring(lineStart + 2, nextStart);
-        crcLine.trim();
-        if (crcLine.length() > 0) {
-            uint32_t partCrc = (uint32_t)strtoul(crcLine.c_str(), nullptr, 16);
-            partCRCs[idx++] = partCrc;
-        }
-        lineStart = nextStart;
-    }
-
-    if (idx != partsCount) {
-        SerialMon.printf("Предупреждение: ожидается %d CRC, получено %d\n", partsCount, idx);
-        partsCount = idx; // подправим
-    }
-
-    // Закрытие FTP
-    sendCommand("AT+FTPQUIT", 3000);
-
-    SerialMon.printf("Версия: %s, CRC файла: %08X, Частей: %d, Размер: %d\n",
-                     version.c_str(), remoteCRC, partsCount, partSize);
-    for (int i = 0; i < partsCount; i++) {
-        SerialMon.printf("CRC части %d: %08X\n", i, partCRCs[i]);
-    }
-
+    SerialMon.println(config);
+    SerialMon.println("Обработка содержимого...");
     return true;
-}
 
+    // // Удалим строки служебного вида: "+FTPGET: 2,x" и "OK"
+    // String cleanText;
+    // int start = 0;
+    // while (start < fullResponse.length()) {
+    //     int lineEnd = fullResponse.indexOf("\n", start);
+    //     if (lineEnd == -1) lineEnd = fullResponse.length();
+    //     String line = fullResponse.substring(start, lineEnd);
+    //     line.trim();
+    //     if (!line.startsWith("+FTPGET:") && line != "OK" && line.length() > 0) {
+    //         cleanText += line + "\n";
+    //     }
+    //     start = lineEnd + 1;
+    // }
+
+    // // Разделим текст по строкам
+    // std::vector<String> lines;
+    // start = 0;
+    // while (start < cleanText.length()) {
+    //     int lineEnd = cleanText.indexOf("\n", start);
+    //     if (lineEnd == -1) lineEnd = cleanText.length();
+    //     String line = cleanText.substring(start, lineEnd);
+    //     line.trim();
+    //     if (line.length() > 0) lines.push_back(line);
+    //     start = lineEnd + 1;
+    // }
+
+    // if (lines.size() < 1) {
+    //     SerialMon.println("Файл пустой или не разобран.");
+    //     return false;
+    // }
+
+    // // Первая строка: версия, crc, parts, partsize
+    // String firstLine = lines[0];
+    // int sep1 = firstLine.indexOf(' ');
+    // int sep2 = firstLine.indexOf(' ', sep1 + 1);
+    // int sep3 = firstLine.indexOf(' ', sep2 + 1);
+    // if (sep1 == -1 || sep2 == -1 || sep3 == -1) {
+    //     SerialMon.println("Неверный формат первой строки.");
+    //     return false;
+    // }
+
+    // version = firstLine.substring(0, sep1);
+    // String crcStr = firstLine.substring(sep1 + 1, sep2);
+    // String partsCountStr = firstLine.substring(sep2 + 1, sep3);
+    // String partSizeStr = firstLine.substring(sep3 + 1);
+
+    // if (!isValidVersionFormat(version)) {
+    //     SerialMon.printf("Invalid version format: %s\n", version.c_str());
+    //     return false;
+    // }
+
+    // remoteCRC = (uint32_t)strtoul(crcStr.c_str(), nullptr, 16);
+    // partsCount = partsCountStr.toInt();
+    // partSize = partSizeStr.toInt();
+
+    // if (remoteCRC == 0 || partsCount <= 0 || partSize <= 0) {
+    //     SerialMon.println("Некорректные значения в первой строке.");
+    //     return false;
+    // }
+
+    // if (partsCount > MAX_PARTS) {
+    //     SerialMon.printf("Ошибка: частей (%d) больше MAX_PARTS (%d)\n", partsCount, MAX_PARTS);
+    //     return false;
+    // }
+
+    // // Парсинг CRC частей
+    // int idx = 0;
+    // for (size_t i = 1; i < lines.size() && idx < partsCount; ++i) {
+    //     String crcLine = lines[i];
+    //     crcLine.trim();
+    //     if (crcLine.length() > 0) {
+    //         uint32_t partCrc = (uint32_t)strtoul(crcLine.c_str(), nullptr, 16);
+    //         partCRCs[idx++] = partCrc;
+    //     }
+    // }
+
+    // if (idx != partsCount) {
+    //     SerialMon.printf("Предупреждение: ожидается %d CRC, получено %d\n", partsCount, idx);
+    //     partsCount = idx;
+    // }
+
+    // // Закрытие FTP-сессии
+    // sendCommand("AT+FTPQUIT", 3000);
+
+    // SerialMon.printf("Версия: %s, CRC файла: %08X, Частей: %d, Размер: %d\n",
+    //                  version.c_str(), remoteCRC, partsCount, partSize);
+    // for (int i = 0; i < partsCount; i++) {
+    //     SerialMon.printf("CRC части %d: %08X\n", i, partCRCs[i]);
+    // }
+
+    // 
+}
 
 bool Sim800Updater::isValidVersionFormat(const String& version) {
     int dot1 = version.indexOf('.');
@@ -566,14 +565,86 @@ bool Sim800Updater::isValidVersionFormat(const String& version) {
            major.toInt() >= 0 && minor.toInt() >= 0 && patch.toInt() >= 0;
 }
 
+bool Sim800Updater::parseConfigContent(const String& configContent, String& version, uint32_t& totalCrc,
+                                       int& partCount, int& partSize) {
+    int lineIndex = 0;
+    int validLines = 0;
+
+    // Читаем построчно
+    int fromIndex = 0;
+    while (fromIndex < configContent.length()) {
+        int endIndex = configContent.indexOf('\n', fromIndex);
+        if (endIndex == -1) endIndex = configContent.length();
+        String line = configContent.substring(fromIndex, endIndex);
+        fromIndex = endIndex + 1;
+
+        line.trim();  // удалить пробелы и \r
+
+        // Пропустить пустые и служебные строки
+        if (line.length() == 0 || line.startsWith("+FTPGET") || line == "OK")
+            continue;
+
+        if (validLines == 0) {
+            // Первая полезная строка: версия, общий CRC, кол-во частей, размер части
+            int sep1 = line.indexOf(' ');
+            int sep2 = line.indexOf(' ', sep1 + 1);
+            int sep3 = line.indexOf(' ', sep2 + 1);
+
+            if (sep1 == -1 || sep2 == -1 || sep3 == -1) {
+                SerialMon.println("Неверный формат первой строки");
+                return false;
+            }
+
+            version = line.substring(0, sep1);
+            totalCrc = strtoul(line.substring(sep1 + 1, sep2).c_str(), nullptr, 16);
+            partCount = line.substring(sep2 + 1, sep3).toInt();
+            partSize = line.substring(sep3 + 1).toInt();
+
+            if (partCount > MAX_PARTS) {
+                SerialMon.printf("Слишком много частей: %d, максимум: %d\n", partCount, MAX_PARTS);
+                return false;
+            }
+        } else {
+            // CRC отдельных частей
+            if (validLines - 1 < MAX_PARTS) {
+                partCRCs[validLines - 1] = strtoul(line.c_str(), nullptr, 16);
+            }
+        }
+
+        validLines++;
+
+        // Если считали все CRC, можно выйти раньше
+        if (validLines > 0 && validLines - 1 == partCount)
+            break;
+    }
+
+    if (validLines < partCount + 1) {
+        SerialMon.printf("Ожидалось %d CRC, получено %d\n", partCount, validLines - 1);
+        return false;
+    }
+
+    SerialMon.printf("Версия: %s, CRC файла: %08X, Частей: %d, Размер: %d\n",
+                     version.c_str(), totalCrc, partCount, partSize);
+    for (int i = 0; i < partCount; i++) {
+        SerialMon.printf("CRC части %d: %08X\n", i, partCRCs[i]);
+    }
+
+    return true;
+}
+
+
 bool Sim800Updater::checkForUpdates(String &version, uint32_t &remoteCRC, int& partsCount, int& partSize) {
     //return false;
     String currentVersion = readLocalVersion();
-
-    if (!fetchConfigFromFTP(version, remoteCRC, partsCount, partSize)) {
-        SerialMon.println("Ошибка загрузки версии и CRC.");
+    String configContent;
+    if (!fetchConfigFromFTP(configContent)) {
+        SerialMon.println("Ошибка загрузки конфигурации с FTP.");
         return false;
-    }
+    }   
+    if (!parseConfigContent(configContent, version, remoteCRC, partsCount, partSize)) {
+        SerialMon.println("Ошибка разбора конфигурации.");
+        return false;
+    } 
 
     if (version == "" || version == currentVersion || remoteCRC == 0 || partsCount <= 0 || partSize <= 0) {
         SerialMon.println("No update required.");

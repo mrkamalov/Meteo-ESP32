@@ -20,12 +20,13 @@ private:
     //bool downloadFirmware();
     bool downloadFileFromFtp(const String& remoteFilename, int partSize, bool isLastPart);
     //bool downloadFileFromFTP(const String& url, const char* path);
-    bool fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int &partsCount, int &partSize);
+    bool fetchConfigFromFTP(String &config);//String &version, uint32_t &remoteCRC, int &partsCount, int &partSize
     String readLocalVersion();
     void saveVersionToEEPROM(const String& version);    
     bool checkForUpdates(String &version, uint32_t &remoteCRC, int& partsCount, int& partSize);
     bool isValidVersionFormat(const String& version);
     bool mergeFirmwareParts(int totalParts, const char *outputFile);  
+    bool parseConfigContent(const String& configContent, String& version, uint32_t& totalCrc, int& partCount, int& partSize);
 
     char FTP_SERVER[32] = {0};
     char FTP_USER[32] = {0};
