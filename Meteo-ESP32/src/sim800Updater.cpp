@@ -430,7 +430,7 @@ bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int
 
     // Запрос файла
     sendCommand("AT+FTPGET=1");
-    delay(3000);
+    delay(5000);
     if (!waitForResponse("+FTPGET: 1,1", 10000)) {
         SerialMon.println("Ошибка получения config.txt");
         return false;
@@ -452,16 +452,34 @@ bool Sim800Updater::fetchConfigFromFTP(String &version, uint32_t &remoteCRC, int
 
     SerialMon.println("Получен config.txt:");
     SerialMon.println(response);
+    SerialMon.println("Обработка первой строки...");
 
-    // Извлекаем первую строку
-    int pos = response.indexOf("\r\n");
-    if (pos == -1) {
-        SerialMon.println("Не найдена первая строка.");
+    // Извлекаем первую строку с полезными данными (пропускаем служебные строки)
+    int lineStart = 0;
+    String firstLine;
+
+    while (true) {
+        int lineEnd = response.indexOf("\r\n", lineStart);
+        if (lineEnd == -1) break;
+
+        firstLine = response.substring(lineStart, lineEnd);
+        firstLine.trim();
+
+        // Пропустить служебные строки и пустые
+        if (firstLine.length() > 0 && !firstLine.startsWith("+FTPGET:") && !firstLine.startsWith("OK")) {
+            break;
+        }
+
+        lineStart = lineEnd + 2; // Переход на следующую строку
+    }
+
+    if (firstLine.length() == 0) {
+        SerialMon.println("Не найдена первая строка с данными.");
         return false;
     }
 
-    String firstLine = response.substring(0, pos);
-    firstLine.trim();
+    SerialMon.println("Найдена первая строка:");
+    SerialMon.println(firstLine);
 
     // Парсим первую строку: VERSION CRC PARTS PARTSIZE
     int sep1 = firstLine.indexOf(' ');
