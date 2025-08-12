@@ -28,6 +28,8 @@ private:
     void sendPowerLossAlert(void);
     bool initGsmModem(char* apn, char* gprsUser, char* gprsPass);
     void modemPowerUp(void);
+    void loadMQTTSettingsFromEEPROM(void);
+    void mqttBrokerReinit(void);
 
     static Sim868Client *instance;
     TinyGsm* _gsmModem;

@@ -1,6 +1,7 @@
 #include "Sim868Client.h"
 #include <HardwareSerial.h>
 #include "SerialMon.h"
+#include <EEPROM.h>
 
 // MQTT details
 // const char* topicLed       = "GsmClientTest/led";
@@ -163,6 +164,67 @@ bool Sim868Client::initGsmModem(char* apn, char* gprsUser, char* gprsPass){
   return true;
 }
 
+void Sim868Client::loadMQTTSettingsFromEEPROM(void){
+  int addr = MQTT_EEPROM_START;
+
+    bool isEmpty = true;
+    for (int i = 0; i < 10; ++i) {
+        if (EEPROM.read(MQTT_EEPROM_START + i) != 0xFF) {
+            isEmpty = false;
+            break;
+        }
+    }
+
+    for (int i = 0; i < sizeof(_mqttServer); i++) {
+        _mqttServer[i] = EEPROM.read(addr++);
+    }
+    _mqttServer[sizeof(_mqttServer) - 1] = '\0';
+
+    _mqttPort = EEPROM.read(addr++) << 8;
+    _mqttPort |= EEPROM.read(addr++);
+
+    for (int i = 0; i < sizeof(_mqttUser); i++) {
+        _mqttUser[i] = EEPROM.read(addr++);
+    }
+    _mqttUser[sizeof(_mqttUser) - 1] = '\0';
+
+    for (int i = 0; i < sizeof(_mqttPass); i++) {
+        _mqttPass[i] = EEPROM.read(addr++);
+    }
+    _mqttPass[sizeof(_mqttPass) - 1] = '\0';
+
+    for (int i = 0; i < sizeof(_mqttClientId); i++) {
+        _mqttClientId[i] = EEPROM.read(addr++);
+    }
+    _mqttClientId[sizeof(_mqttClientId) - 1] = '\0';
+
+    if (isEmpty || _mqttServer[0] == '\0' || _mqttPort == 0 || _mqttUser[0] == '\0' || _mqttPass[0] == '\0' 
+        || _mqttClientId[0] == '\0') {
+        SerialMon.println("EEPROM is empty, loading default MQTT config");
+
+        strncpy(_mqttServer, MQTT_BROKER_DEFAULT, sizeof(_mqttServer));
+        _mqttPort = MQTT_PORT_DEFAULT;
+        strncpy(_mqttUser, MQTT_USERNAME_DEFAULT, sizeof(_mqttUser));
+        strncpy(_mqttPass, MQTT_PASSWORD_DEFAULT, sizeof(_mqttPass));
+        strncpy(_mqttClientId, MQTT_CLIENT_ID_DEFAULT, sizeof(_mqttClientId));
+    }
+    else SerialMon.println("Loaded MQTT config from EEPROM");
+}
+
+void Sim868Client::mqttBrokerReinit(void){
+  // Load MQTT settings from EEPROM
+  loadMQTTSettingsFromEEPROM();
+
+  // Set MQTT server and port
+  _mqttClient->setServer(_mqttServer, _mqttPort);
+  _mqttClient->setCallback(mqttCallbackStatic);
+
+  SerialMon.printf("MQTT Server: %s, Port: %d, User: %s, Client ID: %s\n", 
+              _mqttServer, _mqttPort, _mqttUser, _mqttClientId);
+  if (mqttConnect()) { lastReconnectAttempt = 0; }
+  else SerialMon.println("Failed to connect to MQTT broker, will retry later."); 
+}      
+
 void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId, char* apn, char* gprsUser, char* gprsPass) {
   if(!initGsmModem(apn, gprsUser, gprsPass)) return;  
 
@@ -302,11 +364,9 @@ void Sim868Client::loop() {
     // Reconnect every 10 seconds
     uint32_t t = millis();
     if (t - lastReconnectAttempt > 10000L) {
+      SerialMon.println("Attempting to reconnect to MQTT broker...");
       lastReconnectAttempt = t;
-      // MQTT Broker setup
-      _mqttClient->setServer(_mqttServer, _mqttPort);
-      _mqttClient->setCallback(mqttCallbackStatic);
-      if (mqttConnect()) { lastReconnectAttempt = 0; }
+      mqttBrokerReinit();
     }
     delay(100);
     return;

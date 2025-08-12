@@ -2,7 +2,7 @@ import os
 import zlib
 
 FIRMWARE_FILE = "firmware.bin"
-PART_SIZE = 51200  # размер части, например 50 КБ
+PART_SIZE = 921600  # размер части, например 50 КБ
 VERSION = "1.1.0"
 
 def crc32_file(path):
@@ -26,7 +26,7 @@ def split_file(file_path, part_size):
             data = f.read(part_size)
             if not data:
                 break
-            part_name = f"firmware_part{index:03d}.bin"
+            part_name = f"part{index:03d}.bin"
             with open(part_name, "wb") as part:
                 part.write(data)
             crc = crc32_data(data)
