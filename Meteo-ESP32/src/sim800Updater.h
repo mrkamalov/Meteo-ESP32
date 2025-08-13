@@ -12,9 +12,6 @@ public:
     void begin();   
 
 private:    
-    uint32_t calculateFileCRC32(const char* filePath);
-    bool initSpiffs();
-    void performFirmwareUpdate(String& newVersion);
     void sendCommand(const String& command, int delayMs = 500);
     bool waitForResponse(const String& expected, int timeout);
     //bool downloadFirmware();
@@ -26,6 +23,9 @@ private:
     bool checkForUpdates(String &version, uint32_t &remoteCRC, int& partSize);
     bool isValidVersionFormat(const String& version);    
     bool parseConfigContent(const String& configContent, String& version, uint32_t& totalCrc, int& partSize);
+    bool startUpdate(size_t firmwareSize);
+    bool writeFirmwareChunk(uint8_t *data, size_t len);
+    bool finishUpdate(String& newVersion);
 
     char FTP_SERVER[32] = {0};
     char FTP_USER[32] = {0};

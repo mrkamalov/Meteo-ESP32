@@ -2,12 +2,9 @@
 #include <Update.h>
 #include "const.h"
 #include <FS.h>
-#include <SPIFFS.h>
 #include <EEPROM.h>
-#include "CRC32Utils.h"
 #include "ServerSettings.h"
 #include "SerialMon.h"
-#include <vector>
 
 Sim800Updater::Sim800Updater(){}
 
@@ -30,65 +27,6 @@ void Sim800Updater::begin() {
     }
     else SerialMon.println("Loaded FTP config from EEPROM");
     SerialMon.printf("FTP Server: %s, User: %s, Pass: %s\n", FTP_SERVER, FTP_USER, FTP_PASS);
-}
-
-void Sim800Updater::performFirmwareUpdate(String& newVersion) {
-    SerialMon.println("Начало обновления прошивки...");
-    File firmware = SPIFFS.open(LOCAL_FILE, FILE_READ);
-    if (!firmware) {
-        SerialMon.println("Ошибка: не удалось открыть файл прошивки");
-        return;
-    }
-
-    size_t firmwareSize = firmware.size();
-    SerialMon.printf("Размер прошивки: %d байт\n", firmwareSize);
-
-    if (firmwareSize == 0 || !Update.begin(firmwareSize)) {
-        SerialMon.println("Ошибка подготовки обновления");
-        firmware.close();
-        return;
-    }
-
-    size_t written = Update.writeStream(firmware);
-    if (written != firmwareSize) {
-        SerialMon.printf("Ошибка записи: %d из %d байт\n", written, firmwareSize);
-        Update.end();
-        firmware.close();
-        return;
-    }
-
-    if (!Update.end() || !Update.isFinished()) {
-        SerialMon.println("Ошибка завершения обновления");
-    } else {
-        SerialMon.println("Обновление завершено. Перезагрузка...");
-        delay(1000);
-        // Сохраняем версию прошивки в EEPROM        
-        saveVersionToEEPROM(newVersion);            
-        ESP.restart();
-    }
-
-    firmware.close();
-}
-
-uint32_t Sim800Updater::calculateFileCRC32(const char* filePath) {
-    File file = SPIFFS.open(filePath, FILE_READ);
-    if (!file) {
-        SerialMon.println("Ошибка открытия файла!");
-        return 0;
-    }
-
-    uint32_t crc = 0xFFFFFFFF;
-    uint8_t buffer[512];
-    size_t bytesRead;
-
-    while ((bytesRead = file.read(buffer, sizeof(buffer))) > 0) {
-        for (size_t i = 0; i < bytesRead; i++) {
-            crc = updateCRC32(crc, buffer[i]);
-        }
-    }
-
-    file.close();
-    return crc ^ 0xFFFFFFFF;
 }
 
 void Sim800Updater::sendCommand(const String& command, int delayMs) {
@@ -116,27 +54,45 @@ bool Sim800Updater::waitForResponse(const String& expectedResponse, int timeout)
     return false;
 }
 
-bool Sim800Updater::initSpiffs() {
-    if (!SPIFFS.begin(true)) {
-        SerialMon.println("SPIFFS Mount Failed");
+bool Sim800Updater::startUpdate(size_t firmwareSize) {
+    // Начало обновления, вторая область прошивки
+    if (!Update.begin(firmwareSize, U_FLASH)) {
+        Serial.printf("Update.begin() failed: %s\n", Update.errorString());
         return false;
     }
-    if (SPIFFS.format()) {
-        SerialMon.println("SPIFFS formatted successfully!");
-        return true;
-    } else {
-        SerialMon.println("SPIFFS format failed!");
+    Serial.println("Update started...");
+    return true;
+}
+
+bool Sim800Updater::writeFirmwareChunk(uint8_t *data, size_t len) {
+    size_t written = Update.write(data, len);
+    if (written != len) {
+        Serial.printf("Update.write() failed: %s\n", Update.errorString());
         return false;
     }
+    return true;
+}
+
+bool Sim800Updater::finishUpdate(String& newVersion) {
+    if (!Update.end(true)) { // true = проверка CRC
+        Serial.printf("Update.end() failed: %s\n", Update.errorString());
+        return false;
+    }    
+    SerialMon.println("Обновление завершено. Перезагрузка...");
+    delay(1000);
+    // Сохраняем версию прошивки в EEPROM        
+    saveVersionToEEPROM(newVersion);            
+    ESP.restart();
+    return true;
 }
 
 bool Sim800Updater::downloadFileFromFtp(const String& remoteFilename, int partSize) {// TODO: Test FTP download
-    File file = SPIFFS.open("/"+remoteFilename, FILE_WRITE);    
-    if (!file) {
-        SerialMon.println("Failed to open file for writing");
+    if(startUpdate(partSize)) {
+        SerialMon.println("Firmware update started successfully.");
+    } else {
+        SerialMon.println("Failed to start firmware update.");
         return false;
     }
-
     SerialMon.println("Initializing SIM800 FTP...");
     sendCommand("AT+FTPCID=1");
     sendCommand("AT+FTPSERV=\"" + String(FTP_SERVER) + "\"");
@@ -151,7 +107,9 @@ bool Sim800Updater::downloadFileFromFtp(const String& remoteFilename, int partSi
     // Ожидание подтверждения от модема
     delay(5000);
     waitForResponse("+FTPGET: 1,1\r\n", 15000);
-    int totalBytes = 0;    
+    int totalBytes = 0;
+    unsigned long lastValidDataTime = millis(); // момент последнего корректного ответа
+    const unsigned long TIMEOUT_MS = 60000;     // 60 секунд 
     while (true) {        
         SerialAT.println("AT+FTPGET=2,256");
         delay(150);//50 ms minimum delay
@@ -165,24 +123,27 @@ bool Sim800Updater::downloadFileFromFtp(const String& remoteFilename, int partSi
             break; // Передача завершена
         }
         
-        int startIndex = response.indexOf("+FTPGET: 2,", 2);
-        //SerialMon.printf("\nstartIndex: %d\n", startIndex);        
+        int startIndex = response.indexOf("+FTPGET: 2,", 2);        
         if (startIndex != -1) {
+            lastValidDataTime = millis(); // Сброс таймаута при корректных данных
             startIndex += 11; // Пропускаем "+FTPGET: 2,"            
             int endIndex = response.indexOf("\r\n", startIndex);
-            int availableBytes = response.substring(startIndex, endIndex).toInt();
-            //SerialMon.printf("availableBytes: %d\n", availableBytes);
+            int availableBytes = response.substring(startIndex, endIndex).toInt();            
             startIndex = endIndex + 2; // Пропускаем "\r\n"
             if (availableBytes > 0) {
-                for (int i = 0; i < availableBytes && (startIndex + i) < response.length(); i++) {
-                    file.write(response[startIndex + i]);
-                    totalBytes++;
+                if (!writeFirmwareChunk((uint8_t*)&response[startIndex], availableBytes)) {
+                    SerialMon.println("Error writing firmware chunk");
+                    return false;
                 }
+                totalBytes += availableBytes;                
                 SerialMon.printf("\rTotal bytes written: %d", totalBytes);
             }            
         }
-    }
-    file.close();
+        if (millis() - lastValidDataTime > TIMEOUT_MS) {
+            SerialMon.println("\nTimeout waiting for valid FTP response");
+            return false;
+        }
+    }    
     SerialMon.println("");
     sendCommand("AT+FTPQUIT", 5000);  // Закрытие FTP-сессии
     SerialMon.println("");
@@ -198,23 +159,13 @@ void Sim800Updater::updateFirmwareViaGPRS() {
 	if (checkForUpdates(ver, crc, size)) {		
 		SerialMon.printf("Обновление найдено: версия %s, CRC: 0x%08X, размер файла: %d\n",
 						 ver.c_str(), crc, size);
-		initCRCTable();
-	    if (!initSpiffs()) return;
+		
 	    if (!downloadFileFromFtp("firmware.bin", size)) {
 			SerialMon.printf("Ошибка загрузки файла\n");
 			return;
 		}
-		uint32_t localCRC = calculateFileCRC32(LOCAL_FILE);
-		SerialMon.printf("CRC локального файла: 0x%08X\n", localCRC);
-
-		if (crc == 0 || crc != localCRC) {
-			SerialMon.println("Ошибка: CRC не совпадает.");			
-			return;
-		}
-
-		SerialMon.println("CRC совпадает. Обновляем прошивку...");
-		performFirmwareUpdate(ver);
-		SerialMon.println("Обновление завершено успешно.");
+		
+        if(!finishUpdate(ver)) return;		
 	} else SerialMon.println("Обновление не найдено. Ожидание следующей проверки...");
 }
 

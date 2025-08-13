@@ -37,7 +37,7 @@ void TransmissionManager::begin() {
     if (lastPriority == PRIORITY_WIFI_ONLY || lastPriority == PRIORITY_WIFI_THEN_GPRS) {
         mqttWifiClient.begin(_mqttServer, _mqttPort, _mqttUser, _mqttPass, _mqttClientId);
     }
-    meteosensor.begin();
+    meteosensor.begin();    
 }
 
 void TransmissionManager::loop() {

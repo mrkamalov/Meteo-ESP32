@@ -1,13 +1,10 @@
 #include "WiFiUpdater.h"
 #include <EEPROM.h>
-#include <SPIFFS.h>
 #include "deviceConfig.h"
 #include "ServerSettings.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include "CRC32Utils.h"
 #include <Update.h>
-#include <FS.h>
 #include "SerialMon.h"
 
 WiFiUpdater::WiFiUpdater() {}
@@ -25,20 +22,6 @@ void WiFiUpdater::begin() {
     }
     else SerialMon.println("Loaded HTTP config from EEPROM");
     SerialMon.printf("HTTP Server: %s\n", HTTP_SERVER);
-}
-
-bool WiFiUpdater::initSpiffs() {    
-    if (!SPIFFS.begin(true)) {
-        SerialMon.println("SPIFFS Mount Failed");
-        return false;
-    }
-    if (SPIFFS.format()) {
-        SerialMon.println("SPIFFS formatted successfully!");
-        return true;
-    } else {
-        SerialMon.println("SPIFFS format failed!");
-        return false;
-    }
 }
 
 String WiFiUpdater::readEEPROMVersion() {
@@ -111,28 +94,40 @@ bool WiFiUpdater::isValidVersionFormat(const String& version) {
            major.toInt() >= 0 && minor.toInt() >= 0 && patch.toInt() >= 0;
 }
 
-
-uint32_t WiFiUpdater::calculateLocalCRC32(const char* path) {
-    initCRCTable();
-    File file = SPIFFS.open(path, FILE_READ);
-    if (!file) return 0;
-
-    uint32_t crc = 0xFFFFFFFF;
-    while (file.available()) {
-        crc = updateCRC32(crc, file.read());
-    }
-    file.close();
-    return ~crc;
-}
-
-bool WiFiUpdater::downloadFile(const String& url, const char* path) {
-    int totalLength;       //total size of firmware
-
-    File file = SPIFFS.open(path, FILE_WRITE);
-    if (!file) {
-        SerialMon.println("Failed to open local file for writing");        
+bool WiFiUpdater::startUpdate(size_t firmwareSize) {
+    // Начало обновления, вторая область прошивки
+    if (!Update.begin(firmwareSize, U_FLASH)) {
+        Serial.printf("Update.begin() failed: %s\n", Update.errorString());
         return false;
     }
+    Serial.println("Update started...");
+    return true;
+}
+
+bool WiFiUpdater::writeFirmwareChunk(uint8_t *data, size_t len) {
+    size_t written = Update.write(data, len);
+    if (written != len) {
+        Serial.printf("Update.write() failed: %s\n", Update.errorString());
+        return false;
+    }
+    return true;
+}
+
+bool WiFiUpdater::finishUpdate(String& newVersion) {
+    if (!Update.end(true)) { // true = проверка CRC
+        Serial.printf("Update.end() failed: %s\n", Update.errorString());
+        return false;
+    }    
+    SerialMon.println("Обновление завершено. Перезагрузка...");
+    delay(1000);
+    // Сохраняем версию прошивки в EEPROM        
+    writeEEPROMVersion(newVersion);
+    ESP.restart();
+    return true;
+}
+
+bool WiFiUpdater::downloadFile(const String& url) {
+    int totalLength;       //total size of firmware
 
     HTTPClient http;
     http.begin(url);
@@ -144,6 +139,8 @@ bool WiFiUpdater::downloadFile(const String& url, const char* path) {
     }
     totalLength = http.getSize();
     int len = totalLength;
+    if(startUpdate(totalLength)) SerialMon.println("Firmware update started successfully.");        
+    else return false;
     int bytesRead = 0; // bytes read so far
     SerialMon.printf("File size: %d bytes\n", totalLength);
     WiFiClient* stream = http.getStreamPtr();
@@ -156,9 +153,12 @@ bool WiFiUpdater::downloadFile(const String& url, const char* path) {
         if(size) {
             // read up to 128 byte
             bytesRead += (size > sizeof(buf))? sizeof(buf) : size;
-            int c = stream->readBytes(buf, ((size > sizeof(buf)) ? sizeof(buf) : size));
-            // pass to function
-            file.write(buf, c);
+            int c = stream->readBytes(buf, ((size > sizeof(buf)) ? sizeof(buf) : size));            
+            
+            if (!writeFirmwareChunk((uint8_t*)&buf, c)) {
+                    SerialMon.println("Error writing firmware chunk");
+                    return false;
+            }
             if(len > 0) {
                 len -= c;
             }
@@ -173,8 +173,7 @@ bool WiFiUpdater::downloadFile(const String& url, const char* path) {
         }
         delay(1);
     }    
-    SerialMon.printf("\nDownloaded %d bytes\n", bytesRead);
-    file.close();
+    SerialMon.printf("\nDownloaded %d bytes\n", bytesRead);    
     http.end();
     return true;
 }
@@ -196,57 +195,15 @@ bool WiFiUpdater::updateFirmware() {
     if (remoteVersion == "" || remoteVersion == localVersion) {
         SerialMon.println("No update required.");
         return false;
-    }
+    }    
 
-    if (!initSpiffs()) return false;
-
-    if (!downloadFile(String(HTTP_SERVER) + "/" + FILE_NAME, LOCAL_FILE)) {
+    if (!downloadFile(String(HTTP_SERVER) + "/" + FILE_NAME)) {
         SerialMon.println("Failed to download firmware.");
         return false;
-    }
-    
-    uint32_t localCRC = calculateLocalCRC32(LOCAL_FILE);
+    }    
 
-    SerialMon.printf("Remote CRC: %08X, Local CRC: %08X\n", remoteCRC, localCRC);
-
-    if (remoteCRC == 0 || remoteCRC != localCRC) {
-        SerialMon.println("CRC mismatch, aborting update.");
-        return false;
-    }
-
-    performFirmwareUpdate(remoteVersion);
+    if(!finishUpdate(remoteVersion)) return false;
     
     return true;
-}
-
-void WiFiUpdater::performFirmwareUpdate(String& newVersion) {
-    File updateBin = SPIFFS.open(LOCAL_FILE);
-    if (!updateBin) {
-        SerialMon.println("Failed to open firmware file.");
-        return;
-    }
-
-    if (!Update.begin(updateBin.size())) {
-        SerialMon.println("Update.begin failed");
-        Update.printError(SerialMon);
-        return;
-    }
-
-    size_t written = Update.writeStream(updateBin);
-    if (written != updateBin.size()) {
-        SerialMon.println("Firmware write failed!");
-        Update.printError(SerialMon);
-        return;
-    }
-
-    if (!Update.end()) {
-        SerialMon.println("Update.end failed!");
-        Update.printError(SerialMon);
-        return;
-    }
-    writeEEPROMVersion(newVersion);
-    SerialMon.println("Firmware update successful. Restarting...");
-    delay(1000);
-    ESP.restart();
 }
 
