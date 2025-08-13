@@ -57,17 +57,17 @@ bool Sim800Updater::waitForResponse(const String& expectedResponse, int timeout)
 bool Sim800Updater::startUpdate(size_t firmwareSize) {
     // Начало обновления, вторая область прошивки
     if (!Update.begin(firmwareSize, U_FLASH)) {
-        Serial.printf("Update.begin() failed: %s\n", Update.errorString());
+        SerialMon.printf("Update.begin() failed: %s\n", Update.errorString());
         return false;
     }
-    Serial.println("Update started...");
+    SerialMon.println("Update started...");
     return true;
 }
 
 bool Sim800Updater::writeFirmwareChunk(uint8_t *data, size_t len) {
     size_t written = Update.write(data, len);
     if (written != len) {
-        Serial.printf("Update.write() failed: %s\n", Update.errorString());
+        SerialMon.printf("Update.write() failed: %s\n", Update.errorString());
         return false;
     }
     return true;
@@ -75,7 +75,7 @@ bool Sim800Updater::writeFirmwareChunk(uint8_t *data, size_t len) {
 
 bool Sim800Updater::finishUpdate(String& newVersion) {
     if (!Update.end(true)) { // true = проверка CRC
-        Serial.printf("Update.end() failed: %s\n", Update.errorString());
+        SerialMon.printf("Update.end() failed: %s\n", Update.errorString());
         return false;
     }    
     SerialMon.println("Обновление завершено. Перезагрузка...");
@@ -162,6 +162,7 @@ void Sim800Updater::updateFirmwareViaGPRS() {
 		
 	    if (!downloadFileFromFtp("firmware.bin", size)) {
 			SerialMon.printf("Ошибка загрузки файла\n");
+            Update.abort();
 			return;
 		}
 		

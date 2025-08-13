@@ -97,17 +97,17 @@ bool WiFiUpdater::isValidVersionFormat(const String& version) {
 bool WiFiUpdater::startUpdate(size_t firmwareSize) {
     // Начало обновления, вторая область прошивки
     if (!Update.begin(firmwareSize, U_FLASH)) {
-        Serial.printf("Update.begin() failed: %s\n", Update.errorString());
+        SerialMon.printf("Update.begin() failed: %s\n", Update.errorString());
         return false;
     }
-    Serial.println("Update started...");
+    SerialMon.println("Update started...");
     return true;
 }
 
 bool WiFiUpdater::writeFirmwareChunk(uint8_t *data, size_t len) {
     size_t written = Update.write(data, len);
     if (written != len) {
-        Serial.printf("Update.write() failed: %s\n", Update.errorString());
+        SerialMon.printf("Update.write() failed: %s\n", Update.errorString());
         return false;
     }
     return true;
@@ -115,7 +115,7 @@ bool WiFiUpdater::writeFirmwareChunk(uint8_t *data, size_t len) {
 
 bool WiFiUpdater::finishUpdate(String& newVersion) {
     if (!Update.end(true)) { // true = проверка CRC
-        Serial.printf("Update.end() failed: %s\n", Update.errorString());
+        SerialMon.printf("Update.end() failed: %s\n", Update.errorString());
         return false;
     }    
     SerialMon.println("Обновление завершено. Перезагрузка...");
@@ -199,6 +199,7 @@ bool WiFiUpdater::updateFirmware() {
 
     if (!downloadFile(String(HTTP_SERVER) + "/" + FILE_NAME)) {
         SerialMon.println("Failed to download firmware.");
+        Update.abort();
         return false;
     }    
 
