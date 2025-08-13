@@ -269,13 +269,13 @@ void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, c
 }
 
 void Sim868Client::sendPowerLossAlert() {
-  if (!_gsmModem->isGprsConnected()){
-    SerialMon.println("Sending power loss alert via SMS...");
-    _gsmModem->sendSMS(SMS_TARGET, String("Power off"));
-  }
-  else
-    SerialMon.println("GPRS connected, send alert to Telegram");
-  
+  // if (!_gsmModem->isGprsConnected()){
+  //   SerialMon.println("Sending power loss alert via SMS...");
+  //   _gsmModem->sendSMS(SMS_TARGET, String("Power off"));
+  // }
+  // else
+  //   SerialMon.println("GPRS connected, send alert to Telegram");
+  _gsmModem->sendSMS(SMS_TARGET, String("Power off"));
 }
 
 // === Проверка внешнего питания ===
