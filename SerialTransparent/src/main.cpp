@@ -51,7 +51,7 @@ void waitForResponse(const String& expectedResponse, int timeout = 5000) {
 
 void setup() {
     // Set console baud rate
-    Serial.begin(921600);//115200);
+    Serial.begin(115200);
     
     // Включение питания модема
   SerialMon.println("Modem power up delay");  
@@ -74,7 +74,7 @@ void setup() {
   if (digitalRead(MODEM_STATUS_PIN) != HIGH) delay(2000);
 
     // Set GSM module baud rate
-    Serial1.begin(921600);//, SERIAL_8N1, MODEM_RX, MODEM_TX);    //115200
+    Serial1.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);    //115200
 }
 
 void loop() {    
