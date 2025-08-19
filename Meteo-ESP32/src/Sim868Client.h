@@ -5,8 +5,12 @@
 #include <TinyGsmClient.h>
 #include <PubSubClient.h>
 
-//void sim868Setup();
-//void sim868Loop();
+struct GnssLocation {
+    bool fixStatus;
+    float latitude;
+    float longitude;
+};
+
 class Sim868Client {
 public:
   Sim868Client(TinyGsm* modem, TinyGsmClient* client, PubSubClient*  mqtt);
@@ -16,6 +20,9 @@ public:
   void loop();
   bool isModemConnected();
   void transmitMqttData(const SensorData& sensorData, bool publishSensorData = false);
+  void modemPowerUp(void);
+  void getGNSSLocation(bool isWifiConnected);
+  void gnssPowerOn(void);
 
   static void mqttCallbackStatic(char *topic, byte *payload, unsigned int len);
 private:
@@ -26,10 +33,11 @@ private:
     void handleMqttMessage(char *topic, byte *payload, unsigned int len);
     void checkExternalPower(void);
     void sendPowerLossAlert(void);
-    bool initGsmModem(char* apn, char* gprsUser, char* gprsPass);
-    void modemPowerUp(void);
+    bool initGsmModem(char* apn, char* gprsUser, char* gprsPass);    
     void loadMQTTSettingsFromEEPROM(void);
-    void mqttBrokerReinit(void);
+    void mqttBrokerReinit(void);    
+    bool waitForResponse(const String& expectedResponse, int timeout);    
+    void parseGNSS(const String &response);
 
     static Sim868Client *instance;
     TinyGsm* _gsmModem;
@@ -53,4 +61,8 @@ private:
     int dataToPublish[8] = {0,0,0,0,0,0,0,0};
     bool powerLost = false;
     bool prevPowerLost = false;
+    bool isGNSSPowered = false;
+    GnssLocation gnssLocation = {false, 0.0f, 0.0f};  
+    static const unsigned long GNSS_POLL_INTERVAL_MS = 1 * 60 * 1000; // 15 минут
+    
 };

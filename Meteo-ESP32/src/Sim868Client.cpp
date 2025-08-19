@@ -130,6 +130,108 @@ void Sim868Client::modemPowerUp(void){
   if (digitalRead(MODEM_STATUS_PIN) != HIGH) delay(2000);
 }
 
+bool Sim868Client::waitForResponse(const String& expectedResponse, int timeout) {
+    unsigned long startTime = millis();
+    String response = "";
+    while (millis() - startTime < timeout) {
+        while (SerialAT.available()) {
+            char c = SerialAT.read();
+            response += c;
+            if (response.indexOf(expectedResponse) != -1) {
+                SerialMon.println("Response: " + response);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void Sim868Client::gnssPowerOn(void) {
+  // Включение питания GNSS
+  SerialMon.println("GNSS power up delay");
+  SerialAT.println("AT+CGNSPWR=1"); // Включаем GNSS
+  if(waitForResponse("+CGNSPWR: 1", 5000)){
+    SerialMon.println("GNSS powered on successfully");
+    isGNSSPowered = true;
+  } 
+  else {
+    SerialMon.println("Failed to power on GNSS");
+    isGNSSPowered = false;
+    return;
+  }   
+}
+
+void Sim868Client::parseGNSS(const String &response) {  
+  int fieldIndex = 0;
+  int start = 0;
+
+  String runStatus, fixStatus, lat, lon;
+
+  for (int i = 0; i <= response.length(); i++) {
+    if (i == response.length() || response[i] == ',') {
+      String token = response.substring(start, i);
+      token.trim();
+
+      if (fieldIndex == 0) runStatus = token; // GNSS run status
+      if (fieldIndex == 1) fixStatus = token; // Fix status
+      if (fieldIndex == 3) lat = token;       // Latitude
+      if (fieldIndex == 4) lon = token;       // Longitude
+
+      fieldIndex++;
+      start = i + 1;
+    }
+  }
+
+  // Проверяем условия: GNSS включен и есть фиксация
+  if (runStatus == "1" && fixStatus == "1" && lat.length() > 0 && lon.length() > 0) {    
+    gnssLocation.latitude = lat.toFloat();
+    gnssLocation.longitude = lon.toFloat();
+    gnssLocation.fixStatus = true;
+    SerialMon.printf("GNSS Location: Lat: %.6f, Lon: %.6f\n", gnssLocation.latitude, gnssLocation.longitude);
+  }
+  else {
+    gnssLocation.fixStatus = false;
+    SerialMon.println("GNSS location not available or fix not acquired");
+  }  
+}
+
+void Sim868Client::getGNSSLocation(bool isWifiConnected) {
+  static unsigned long gnssPollTime = 0;
+  static int gnssErrorCount = 0;
+
+  if (millis() - gnssPollTime < GNSS_POLL_INTERVAL_MS) {
+    return;
+  }
+  gnssPollTime = millis();  
+  if (!isGNSSPowered) {
+    if(isWifiConnected) modemPowerUp();
+    gnssPowerOn();
+    if (!isGNSSPowered) return;
+  }
+  SerialMon.println("Requesting GNSS location...");
+  SerialAT.println("AT+CGNSINF");
+  if(waitForResponse("+CGNSINF: ", 5000)) {
+    SerialMon.println("GNSS location request sent successfully");
+    gnssErrorCount = 0;
+  } else {
+    SerialMon.println("Failed to send GNSS location request");
+    gnssErrorCount++;
+    if (gnssErrorCount >= 3) {
+      SerialMon.println("GNSS error count exceeded, powering off GNSS");      
+      isGNSSPowered = false;
+      gnssErrorCount = 0; // Reset error count
+    }
+    return;
+  }  
+  String response = "";
+  while (SerialAT.available()) {
+    char c = SerialAT.read();
+    response += c;
+  }
+  SerialMon.println("GNSS response: " + response);
+  parseGNSS(response);
+}
+
 bool Sim868Client::initGsmModem(char* apn, char* gprsUser, char* gprsPass){
   modemPowerUp();
 
@@ -226,8 +328,7 @@ void Sim868Client::mqttBrokerReinit(void){
 }      
 
 void Sim868Client::begin(char* broker, uint16_t& port, char* user, char* pass, char* clientId, char* apn, char* gprsUser, char* gprsPass) {
-  if(!initGsmModem(apn, gprsUser, gprsPass)) return;  
-
+  if(!initGsmModem(apn, gprsUser, gprsPass)) return;
   // GPRS connection parameters are usually set after network registration
   SerialMon.print(F("Connecting to "));
   SerialMon.print(_apn);
@@ -347,6 +448,7 @@ void Sim868Client::loop() {
   }
 
   checkExternalPower();
+  getGNSSLocation(false); // Get GNSS location if powered
 
   if(_gsmModem->isNetworkConnected() && !_gsmModem->isGprsConnected()) {
     SerialMon.println("GPRS disconnected!");

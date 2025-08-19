@@ -37,6 +37,8 @@ void TransmissionManager::begin() {
     if (lastPriority == PRIORITY_WIFI_ONLY || lastPriority == PRIORITY_WIFI_THEN_GPRS) {
         mqttWifiClient.begin(_mqttServer, _mqttPort, _mqttUser, _mqttPass, _mqttClientId);
     }
+    if(lastPriority == PRIORITY_WIFI_ONLY) simClient->modemPowerUp();
+    simClient->gnssPowerOn(); 
     meteosensor.begin();    
 }
 
@@ -62,6 +64,7 @@ void TransmissionManager::loop() {
     }    
     switch (currentPriority) {
         case PRIORITY_WIFI_ONLY:
+            simClient->getGNSSLocation(true); // Получение данных GNSS, если используется WiFi
             mqttWifiClient.loop(sensorData, false); //receiveSensorData); // Обработка MQTT сообщений mytest TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
             if(WiFi.status() == WL_CONNECTED && updateTimeoutPassed) {
                 // Если WiFi подключен, то проверяем обновления
@@ -83,6 +86,7 @@ void TransmissionManager::loop() {
 
         case PRIORITY_WIFI_THEN_GPRS:
             if(WiFi.status() == WL_CONNECTED){
+                simClient->getGNSSLocation(true); // Получение данных GNSS, если используется WiFi
                 mqttWifiClient.loop(sensorData, false);// receiveSensorData); // Обработка MQTT сообщений TODO: ВКЛЮЧИТЬ В ПРОДАКШЕНЕ!!!!!!!!!!!!!!!!!
                 if(updateTimeoutPassed) {
                     // Если WiFi подключен, то проверяем обновления
