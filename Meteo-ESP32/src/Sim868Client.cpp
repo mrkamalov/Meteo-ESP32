@@ -228,7 +228,7 @@ void Sim868Client::getGNSSLocation(bool isWifiConnected) {
     char c = SerialAT.read();
     response += c;
   }
-  SerialMon.println("GNSS response: " + response);
+  SerialMon.println("GNSS data: " + response);
   parseGNSS(response);
 }
 

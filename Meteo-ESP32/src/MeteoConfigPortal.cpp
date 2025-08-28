@@ -24,6 +24,8 @@ void MeteoConfigPortal::begin() {
     loadDevicesFromEEPROM();
     loadGPRSSettings();
     loadTransferPriority();
+    SerialMon.println("WiFi SSID: " + wifiSSID);    
+    SerialMon.println("WiFi Pass: " + wifiPass);    
     if (connectToWiFi()) {
         SerialMon.println("Connected to WiFi: " + wifiSSID);
         SerialMon.println("IP Address: " + WiFi.localIP().toString());
@@ -171,11 +173,15 @@ void MeteoConfigPortal::loadDevicesFromEEPROM() {
 
 // ==== Получение списка устройств в виде строки ====
 String MeteoConfigPortal::getMeteoDevicesList() {
-    String output = "Devices:\n";
+    String output = "";
     for (const auto &dev : meteoDevices) {
-        output += "ID: " + String(dev.id) + ", Name: " + dev.name + "\n";
+        output += "Modbus ID: " + String(dev.id) + ", Название: " + dev.name + "\n";
     }
     return output;
+}
+
+std::vector<MeteoDevice> MeteoConfigPortal::getMeteoDevices() {
+  return meteoDevices;
 }
 
 // ==== Сохранение ID устройства ====
@@ -331,261 +337,427 @@ void MeteoConfigPortal::saveHttpServerToEEPROM(const String& server) {
     SerialMon.printf("Server: %s\n", server.c_str());
 }
 
-// ==== Встроенный HTML-фронтенд ====
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Meteo Config</title>
-    <script>
-        async function loadDevices() {
-            let response = await fetch("/devices");
-            let data = await response.text();
-            document.getElementById("deviceList").innerText = data;
+  <meta charset="UTF-8">
+  <title>Управление устройством</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">																		
+  <style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f4f4f4;
+    color: #333;
+  }
 
-            let deviceIdResponse = await fetch("/getDeviceId");
-            let deviceId = await deviceIdResponse.text();
-            document.getElementById("deviceId").value = deviceId;
+  header {
+    background: #013d85;
+    color: white;
+    padding: 15px;
+    text-align: center;
+  }
 
-            let wifiResponse = await fetch("/getWiFi");
-            let wifi = await wifiResponse.json();
-            document.getElementById("ssid").value = wifi.ssid;
-            document.getElementById("pass").value = wifi.pass;
+  nav {
+    background: #333;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 
-            let gprsResponse = await fetch("/getGPRS");
-            let gprs = await gprsResponse.json();
-            document.getElementById("apn").value = gprs.apn;
-            document.getElementById("gprsUser").value = gprs.user;
-            document.getElementById("gprsPass").value = gprs.pass;
+  nav a {
+    color: white;
+    padding: 10px 15px;
+    text-decoration: none;
+    display: block;
+    text-align: center;
+  }
 
-            let priorityResponse = await fetch("/getPriority");
-            let priority = await priorityResponse.text();
-            document.getElementById("priority").value = priority;            
-        }
+  nav a:hover {
+    background: #1c3341;
+  }
 
-        async function addDevice() {
-            let id = document.getElementById("id").value;
-            let name = document.getElementById("name").value;
-            await fetch(`/add?id=${id}&name=${name}`);
-            loadDevices();
-        }
+  section {
+    display: none;
+    padding: 20px;
+  }
 
-        async function removeDevice() {
-            let id = document.getElementById("id").value;
-            await fetch(`/remove?id=${id}`);
-            loadDevices();
-        }
+  section.active {
+    display: block;
+  }
 
-        async function setDeviceId() {
-            let deviceId = document.getElementById("deviceId").value;
-            await fetch(`/setDeviceId?deviceId=${deviceId}`);
-        }
+  h2 {
+    margin-top: 0;
+  }
 
-        async function saveWiFi() {
-            let ssid = document.getElementById("ssid").value;
-            let pass = document.getElementById("pass").value;
-            await fetch(`/setWiFi?ssid=${ssid}&pass=${pass}`);
-        }
+  .card {
+    background: #fff;
+    padding: 20px;
+    margin: 10px auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    max-width: 500px; /* ограничиваем ширину карточки */
+  }
 
-        async function saveGPRS() {
-            let apn = document.getElementById("apn").value;
-            let user = document.getElementById("gprsUser").value;
-            let pass = document.getElementById("gprsPass").value;
-            await fetch(`/setGPRS?apn=${apn}&user=${user}&pass=${pass}`);
-        }
+  .card input,
+  .card select,
+  .card button {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+  }
 
-        async function savePriority() {
-            let priority = document.getElementById("priority").value;
-            await fetch(`/setPriority?priority=${priority}`);
-        }
+  .card button {
+    background: #013d85;
+    color: white;
+    border: none;
+    cursor: pointer;
+    margin: 10px auto; /* центрируем */
+  }
 
-        function goToUpdate() {
-            window.location.href = "/update";
-        }
+  .card button:hover {
+    background: #012c60;
+  }
 
-        async function startWiFiConfig() {
-            await fetch("/startConfig");
-        }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+  }
 
-        async function reboot() {
-            await fetch("/reboot");
-        }
-        async function saveMQTT() {
-            let broker = encodeURIComponent(document.getElementById("mqttBroker").value);
-            let port = document.getElementById("mqttPort").value;
-            let user = encodeURIComponent(document.getElementById("mqttUser").value);
-            let pass = encodeURIComponent(document.getElementById("mqttPass").value);
-            let clientId = encodeURIComponent(document.getElementById("mqttClientId").value);
+  th,
+  td {
+    border: 1px solid #ccc;
+    padding: 6px 10px;
+    text-align: left;
+  }
 
-            await fetch(`/setMQTT?broker=${broker}&port=${port}&user=${user}&pass=${pass}&clientId=${clientId}`);
-        }
+  th {
+    background: #f0f0f0;
+  }
 
-        async function loadMQTT() {
-            const response = await fetch("/getMQTT");
-            const mqtt = await response.json();
-            document.getElementById("mqttBroker").value = mqtt.broker;
-            document.getElementById("mqttPort").value = mqtt.port;
-            document.getElementById("mqttUser").value = mqtt.user;
-            document.getElementById("mqttPass").value = mqtt.pass;
-            document.getElementById("mqttClientId").value = mqtt.clientId;
-        }
+  /* Контейнер для форм */
+  .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 10px 0;
+  }
 
-        async function loadFTP() {
-            let ftpResponse = await fetch("/getFTP");
-            let ftp = await ftpResponse.json();
-            document.getElementById("ftpServer").value = ftp.server;
-            document.getElementById("ftpUser").value = ftp.user;
-            document.getElementById("ftpPass").value = ftp.pass;
-        }
+  .form-row > * {
+    flex: 1 1 200px;
+  }
 
-        async function saveFTP() {
-            let server = encodeURIComponent(document.getElementById("ftpServer").value);
-            let user = encodeURIComponent(document.getElementById("ftpUser").value);
-            let pass = encodeURIComponent(document.getElementById("ftpPass").value);
-            await fetch(`/setFTP?server=${server}&user=${user}&pass=${pass}`);
-        }
-
-        async function loadHttpServer() {
-            let response = await fetch("/getHttpServer");
-            let server = await response.text();
-            document.getElementById("httpServer").value = server;
-        }
-
-        async function saveHttpServer() {
-            let server = encodeURIComponent(document.getElementById("httpServer").value);
-            await fetch(`/setHttpServer?server=${server}`);
-        }
-
-        async function setDefaults() {
-            if (confirm("Are you sure you want to reset all settings to default?")) {
-                await fetch("/setDefaults");
-                alert("Default settings applied. Device will reboot.");
-            }
-        }
-
-        window.onload = function () {
-            loadDevices();
-            loadMQTT();
-            loadFTP();
-            loadHttpServer();
-        };
-    </script>
+  /* Адаптивные стили */
+  @media (max-width: 600px) {
+    .card {
+      max-width: 100%;
+    }
+  }
+  </style>
 </head>
 <body>
-    <h1>Meteo Config v1.1.0</h1>
-    <pre id="deviceList"></pre>
-    <input id="id" placeholder="ID">
-    <input id="name" placeholder="Name">
-    <button onclick="addDevice()">Add</button>
-    <button onclick="removeDevice()">Delete</button>
-    <br><br>
-    <label for="deviceId">Device ID:</label>
-    <input id="deviceId" placeholder="Device ID">
-    <button onclick="setDeviceId()">Change Device ID</button>
-    <br><br>
-    <h3>WiFi Settings</h3>
-    <label for="ssid">WiFi SSID:</label>
-    <input id="ssid" placeholder="WiFi SSID">
-    <label for="pass">WiFi Password:</label>
-    <input id="pass" placeholder="WiFi Password">
-    <button onclick="saveWiFi()">Save WiFi</button>
-    <br><br>
-    <h3>GPRS Settings</h3>
-    <label for="apn">GPRS APN:</label>
-    <input id="apn" placeholder="APN">
-    <label for="gprsUser">GPRS User:</label>
-    <input id="gprsUser" placeholder="GPRS User">
-    <label for="gprsPass">GPRS Password:</label>
-    <input id="gprsPass" placeholder="GPRS Password">
-    <button onclick="saveGPRS()">Save GPRS</button>
-    <br><br>
-    <label for="priority">Data Transfer Priority:</label>
-    <select id="priority">
-        <option value="0">Only WiFi</option>
-        <option value="1">Only GPRS</option>
-        <option value="2">WiFi first, then GPRS</option>
-    </select>
-    <button onclick="savePriority()">Save Priority</button>
-    <br><br>
-    <h3>MQTT Settings</h3>
-    <label for="mqttBroker">MQTT Broker:</label>
-    <input id="mqttBroker" placeholder="Broker">
-    <label for="mqttPort">MQTT Port:</label>
-    <input id="mqttPort" type="number" placeholder="Port">
-    <br><br>
-    <label for="mqttUser">MQTT Username:</label>
-    <input id="mqttUser" placeholder="Username">
-    <label for="mqttClientId">MQTT Client ID:</label>
-    <input id="mqttClientId" placeholder="Client ID">
-    <label for="mqttPass">MQTT Password:</label>
-    <input id="mqttPass" placeholder="Password">    
-    <button onclick="saveMQTT()">Save MQTT settings</button>
-    <br><br>
-    <h3>FTP Settings</h3>
-    <label for="ftpServer">FTP Server:</label>
-    <input id="ftpServer" placeholder="FTP Server">
-    <label for="ftpUser">FTP User:</label>
-    <input id="ftpUser" placeholder="FTP User">
-    <label for="ftpPass">FTP Password:</label>
-    <input id="ftpPass" placeholder="FTP Password">
-    <button onclick="saveFTP()">Save FTP</button>
-    <br><br>
-    <h3>HTTP Server</h3>
-    <label for="httpServer">HTTP Server URL:</label>
-    <input id="httpServer" placeholder="https://example.com/firmware">
-    <button onclick="saveHttpServer()">Save HTTP Server</button>
-    <br><br>
-    <button onclick="location.href='/sensor'">Sensor Values</button>
-    <br><br>
-    <button onclick="goToUpdate()">Update Firmware</button>
-    <br><br>
-    <button onclick="reboot()">Reboot Device</button>
-    <br><br>
-    <button onclick="setDefaults()">Set Default Settings</button>
-</body>
-</html>
-)rawliteral";
+  <header>
+    <h1>Sergek Eco SE-1</h1>
+  </header>
+  <nav>
+    <a href="#" onclick="showSection('sensor_values')">Мониторинг</a>
+    <a href="#" onclick="showSection('calibration')">Калибровка</a>
+    <a href="#" onclick="showSection('sensors_settings')">Список устройств</a>
+    <a href="#" onclick="showSection('wifi_gprs')">Настройки WiFi/GPRS</a>
+    <a href="#" onclick="showSection('mqtt')">Настройки MQTT</a>
+    <a href="#" onclick="showSection('ftp_http')">Настройки FTP/HTTP сервера</a>
+    <a href="#" onclick="showSection('system')">Системные настройки</a>
+  </nav>
 
-const char sensor_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>    
-    <title>Sensor Data</title>
-    <script>
-        async function fetchSensorData() {
-            try {
-                let res = await fetch("/getSensorData");
-                let data = await res.json();
-                let table = "";
-
-                for (const [key, value] of Object.entries(data)) {
-                    table += `<tr><td>${key}</td><td>${value.toFixed(2)}</td></tr>`;
-                }
-
-                document.getElementById("data").innerHTML = table;
-            } catch (e) {
-                document.getElementById("data").innerHTML = "<tr><td colspan='2'>Ошибка загрузки</td></tr>";
-            }
-        }
-
-        setInterval(fetchSensorData, 3000);
-        window.onload = fetchSensorData;
-    </script>
-</head>
-<body>
-    <h2>Sensor Readings</h2>
-    <table border="1" cellpadding="5">
+  <section id="sensor_values" class="active">
+    <div class="card">
+      <h2>Мониторинг</h2>
+      <table>
         <thead>
-            <tr>
-                <th>Parameter</th>
-                <th>Value</th>
-            </tr>
+          <tr>
+            <th>Параметр</th>
+            <th>Значение</th>
+          </tr>
         </thead>
-        <tbody id="data">
+        <tbody id="sensorData">
+          <tr><td colspan="2">Загрузка...</td></tr>
         </tbody>
-    </table>
-    <br>
-    <button onclick="location.href='/'">Back</button>
+      </table>
+    </div>
+  </section>
+
+  <section id="calibration">
+    <div class="card">
+      <h2>Калибровка</h2>      
+    </div>
+  </section>
+
+  <section id="sensors_settings">
+    <div class="card">
+      <h2>Список устройств</h2>
+      <pre id="deviceList"></pre>
+	  <div class="form-row">					
+      <input id="id" placeholder="Modbus ID">
+      <select id="name">
+      <option value="SE-1">SE-1</option>      
+      </select>
+	  </div>
+    <div class="form-row">
+      <button onclick="addDevice()">Добавить</button>
+      <button onclick="removeDevice()">Удалить</button>
+    </div>
+      <button onclick="reboot()">Перезапустить опрос</button>
+    </div>
+  </section>
+
+  <section id="wifi_gprs">
+    <div class="card">
+      <h2>WiFi / GPRS / Приоритет передачи</h2>
+	  <div class="form-row">
+      <label for="ssid">WiFi SSID:</label>
+      <input id="ssid" placeholder="WiFi SSID">
+      <label for="pass">WiFi Password:</label>
+      <input id="pass" placeholder="WiFi Password">	  
+      <label for="apn">GPRS APN:</label>
+      <input id="apn" placeholder="APN">
+      <label for="gprsUser">GPRS User:</label>
+      <input id="gprsUser" placeholder="GPRS User">
+      <label for="gprsPass">GPRS Password:</label>
+      <input id="gprsPass" placeholder="GPRS Password">	  
+      <label for="priority">Data Transfer Priority:</label>
+      <select id="priority">
+          <option value="0">Only WiFi</option>
+          <option value="1">Only GPRS</option>
+          <option value="2">WiFi first, then GPRS</option>
+      </select>
+	  </div>	
+      <button onclick="saveNetworkSettings()">Сохранить настройки</button>
+    </div>
+  </section>    
+
+  <section id="mqtt">
+    <div class="card">
+      <h2>Настройки MQTT</h2>
+      <div class="form-row">
+        <label for="mqttBroker">MQTT Broker:</label>
+        <input id="mqttBroker" placeholder="Broker">
+        <label for="mqttPort">MQTT Port:</label>
+        <input id="mqttPort" type="number" placeholder="Port">        
+        <label for="mqttUser">MQTT Username:</label>
+        <input id="mqttUser" placeholder="Username">
+        <label for="mqttClientId">MQTT Client ID:</label>
+        <input id="mqttClientId" placeholder="Client ID">
+        <label for="mqttPass">MQTT Password:</label>
+        <input id="mqttPass" placeholder="Password">
+        <button onclick="saveMQTT()">Сохранить настройки</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="ftp_http">
+    <div class="card">
+      <h2>Настройки FTP/HTTP сервера</h2>
+      <div class="form-row">
+        <label for="ftpServer">FTP Server:</label>
+        <input id="ftpServer" placeholder="FTP Server">
+        <label for="ftpUser">FTP User:</label>
+        <input id="ftpUser" placeholder="FTP User">
+        <label for="ftpPass">FTP Password:</label>
+        <input id="ftpPass" placeholder="FTP Password">
+        <label for="httpServer">HTTP Server URL:</label>
+        <input id="httpServer" placeholder="https://example.com/firmware">
+        <button onclick="saveServers()">Сохранить настройки</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="system">
+    <div class="card">
+      <h2>Системные настройки</h2>
+      <div class="form-row">
+      <label for="deviceId">Серийный номер устройства:</label>
+      <input id="deviceId" placeholder="Серийный номер устройства">
+      <button onclick="setDeviceId()">Сохранить</button>
+      </div><br><br>
+      <button onclick="goToUpdate()">Обновление ПО</button>      
+      <button onclick="setDefaults()">Установить настройки по умолчанию</button>
+      <button onclick="reboot()">Перезагрузить устройство</button>
+    </div>
+  </section>
+
+  <script>
+    async function saveNetworkSettings() {
+      let ssid     = encodeURIComponent(document.getElementById("ssid").value);
+      let pass     = encodeURIComponent(document.getElementById("pass").value);
+      let apn      = encodeURIComponent(document.getElementById("apn").value);
+      let user     = encodeURIComponent(document.getElementById("gprsUser").value);
+      let gprsPass = encodeURIComponent(document.getElementById("gprsPass").value);
+      let priority = encodeURIComponent(document.getElementById("priority").value);
+
+      let url = `/saveNetworkSettings?ssid=${ssid}&pass=${pass}&apn=${apn}&user=${user}&gprsPass=${gprsPass}&priority=${priority}`;
+      let response = await fetch(url);
+    }
+
+    async function loadDeviceSection() {
+      // Получение списка устройств
+      let response = await fetch("/devices");
+      let data = await response.text();
+      document.getElementById("deviceList").innerText = data;
+
+      // Получение Device ID
+      let deviceIdResponse = await fetch("/getDeviceId");
+      let deviceId = await deviceIdResponse.text();
+      document.getElementById("deviceId").value = deviceId;
+    }
+
+    async function loadNetworkSettings() {    
+      // WiFi
+      let wifiResponse = await fetch("/getWiFi");
+      let wifi = await wifiResponse.json();
+      document.getElementById("ssid").value = wifi.ssid;
+      document.getElementById("pass").value = wifi.pass;
+
+      // GPRS
+      let gprsResponse = await fetch("/getGPRS");
+      let gprs = await gprsResponse.json();
+      document.getElementById("apn").value = gprs.apn;
+      document.getElementById("gprsUser").value = gprs.user;
+      document.getElementById("gprsPass").value = gprs.pass;
+
+      // Priority
+      let priorityResponse = await fetch("/getPriority");
+      let priority = await priorityResponse.text();
+      document.getElementById("priority").value = priority;    
+    }
+
+    async function saveMQTT() {
+      let broker = encodeURIComponent(document.getElementById("mqttBroker").value);
+      let port = document.getElementById("mqttPort").value;
+      let user = encodeURIComponent(document.getElementById("mqttUser").value);
+      let pass = encodeURIComponent(document.getElementById("mqttPass").value);
+      let clientId = encodeURIComponent(document.getElementById("mqttClientId").value);
+
+      await fetch(`/setMQTT?broker=${broker}&port=${port}&user=${user}&pass=${pass}&clientId=${clientId}`);
+    }
+
+    async function loadMQTT() {
+      const response = await fetch("/getMQTT");
+      const mqtt = await response.json();
+      document.getElementById("mqttBroker").value = mqtt.broker;
+      document.getElementById("mqttPort").value = mqtt.port;
+      document.getElementById("mqttUser").value = mqtt.user;
+      document.getElementById("mqttPass").value = mqtt.pass;
+      document.getElementById("mqttClientId").value = mqtt.clientId;
+    }
+
+    async function loadFTP() {
+      let ftpResponse = await fetch("/getFTP");
+      let ftp = await ftpResponse.json();
+      document.getElementById("ftpServer").value = ftp.server;
+      document.getElementById("ftpUser").value = ftp.user;
+      document.getElementById("ftpPass").value = ftp.pass;
+    }
+
+    async function loadHttpServer() {
+      let response = await fetch("/getHttpServer");
+      let server = await response.text();
+      document.getElementById("httpServer").value = server;
+    }
+
+    async function saveServers() {
+      let ftpServer = encodeURIComponent(document.getElementById("ftpServer").value);
+      let ftpUser   = encodeURIComponent(document.getElementById("ftpUser").value);
+      let ftpPass   = encodeURIComponent(document.getElementById("ftpPass").value);
+      let httpServer = encodeURIComponent(document.getElementById("httpServer").value);
+
+      let url = `/setServers?ftpServer=${ftpServer}&ftpUser=${ftpUser}&ftpPass=${ftpPass}&httpServer=${httpServer}`;
+      let response = await fetch(url);    
+    }
+
+    async function setDefaults() {
+      if (confirm("Вы уверены, что хотите установить настройки по умолчанию?")) {
+        await fetch("/setDefaults");
+        alert("Настройки по умолчанию установлены. Устройство будет перезагружено");
+      }
+    }
+
+    async function reboot() {
+      await fetch("/reboot");
+    }
+
+    async function goToUpdate() {
+      window.location.href = "/update";
+    }
+
+    async function addDevice() {
+      let id = document.getElementById("id").value;
+      let name = document.getElementById("name").value;
+      let response = await fetch(`/add?id=${id}&name=${name}`);
+
+      if (!response.ok) {        
+        alert(await response.text());
+        return;
+      }
+
+      loadDeviceSection();
+    }
+
+    async function removeDevice() {
+      let id = document.getElementById("id").value;
+      await fetch(`/remove?id=${id}`);
+      loadDeviceSection();
+    }
+
+    async function setDeviceId() {
+      let deviceId = document.getElementById("deviceId").value;
+      await fetch(`/setDeviceId?deviceId=${deviceId}`);
+    }
+
+    function showSection(id) {
+      document.querySelectorAll("section").forEach(sec => sec.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+    }
+
+    // AJAX: загрузка данных сенсоров каждые 3 секунды
+    function loadSensorData() {
+      fetch('/getSensorData')
+        .then(response => response.json())
+        .then(data => {
+          let rows = "";
+          for (const [key, value] of Object.entries(data)) {
+            rows += `<tr><td>${key}</td><td>${Number(value).toFixed(2)}</td></tr>`;
+          }
+          document.getElementById('sensorData').innerHTML = rows;
+        })
+        .catch(err => {
+          document.getElementById('sensorData').innerHTML =
+            "<tr><td colspan='2'>Ошибка загрузки</td></tr>";
+        });
+    }
+
+    setInterval(() => {
+      if (document.getElementById('sensor_values').classList.contains('active')) {
+        loadSensorData();
+      }
+    }, 3000);
+
+    window.onload = function() {
+      loadSensorData();
+      loadDeviceSection();
+      loadNetworkSettings();
+      loadMQTT();
+      loadFTP();
+      loadHttpServer();
+    };    
+  </script>
 </body>
 </html>
 )rawliteral";
@@ -607,6 +779,10 @@ void MeteoConfigPortal::handleAddDevice() {
 
         int id = request->getParam("id")->value().toInt();
         String name = request->getParam("name")->value();
+        if(id <= 0 || id > 254) {
+            request->send(400, "text/plain", "Ошибка: некорректный ID устройства");
+            return;
+        }
 
         meteoDevices.push_back({id, name});
         saveDevicesToEEPROM();
@@ -639,12 +815,14 @@ void MeteoConfigPortal::handleSetDeviceId() {
         }
 
         int id = request->getParam("deviceId")->value().toInt();
-        if(id < 0 || id > 0xFFFF) {
+        if(id < 0 || id > 254) {
             request->send(400, "text/plain", "Ошибка: некорректный ID устройства");
             return;
         }
         saveDeviceId(id);
         request->send(200, "text/plain", "ID устройства сохранен");
+        delay(1000);
+        ESP.restart();
     });
 }
 
@@ -666,239 +844,225 @@ void MeteoConfigPortal::handleGetWiFi() {
     });    
 }
 
-void MeteoConfigPortal::handleSetWiFi() {
-    server.on("/setWiFi", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        if (request->hasParam("ssid") && request->hasParam("pass")) {
-            String ssid = request->getParam("ssid")->value();
-            String pass = request->getParam("pass")->value();
-            saveWiFiSettings(ssid, pass);
-            request->send(200, "text/plain", "WiFi settings saved. Rebooting...");
-            delay(1000);
-            ESP.restart();
-        } else {
-            request->send(400, "text/plain", "Missing parameters");
+void MeteoConfigPortal::handleSaveNetworkSettings() {
+    server.on("/saveNetworkSettings", HTTP_GET, [this](AsyncWebServerRequest *request) {
+      bool handled = false;
+
+      // ---- WiFi ----
+      if (request->hasParam("ssid") && request->hasParam("pass")) {
+        String ssid = request->getParam("ssid")->value();
+        String pass = request->getParam("pass")->value();
+        saveWiFiSettings(ssid, pass);
+        handled = true;
+      }
+      // ---- GPRS ----
+      if (request->hasParam("apn") && request->hasParam("user") && request->hasParam("gprsPass")) {
+        String apn  = request->getParam("apn")->value();
+        String user = request->getParam("user")->value();
+        String gprsPass = request->getParam("gprsPass")->value();
+        saveGPRSSettings(apn, user, gprsPass);
+        handled = true;
+      }
+      // ---- Priority ----
+      if (request->hasParam("priority")) {
+        int val = request->getParam("priority")->value().toInt();
+        if (val >= PRIORITY_WIFI_ONLY && val < PRIORITIES_NUMBER) {
+          transferPriority = static_cast<DataPriority>(val);
+          EEPROM.write(TRANSFER_PRIORITY_ADDR, (uint8_t)transferPriority);
+          EEPROM.commit();
+          handled = true;
         }
+      }
+      if (handled) {
+        request->send(200, "text/plain", "Settings saved. Rebooting...");
+        delay(1000);
+        ESP.restart();
+      } else {
+        request->send(400, "text/plain", "Missing or invalid parameters");
+      }
     });
 }
 
 void MeteoConfigPortal::handleGetGPRS() {
     server.on("/getGPRS", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        String json = "{\"apn\": \"" + gprsAPN + "\", \"user\": \"" + gprsUser + "\", \"pass\": \"" + gprsPass + "\"}";
-        request->send(200, "application/json", json);
-    });
-}
-
-void MeteoConfigPortal::handleSetGPRS() {
-    server.on("/setGPRS", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        if (request->hasParam("apn") && request->hasParam("user") && request->hasParam("pass")) {
-            String apn = request->getParam("apn")->value();
-            String user = request->getParam("user")->value();
-            String pass = request->getParam("pass")->value();
-            saveGPRSSettings(apn, user, pass);
-            request->send(200, "text/plain", "GPRS settings saved. Rebooting...");
-            delay(1000);
-            ESP.restart();
-        } else {
-            request->send(400, "text/plain", "Missing parameters");
-        }
+      String json = "{\"apn\": \"" + gprsAPN + "\", \"user\": \"" + gprsUser + "\", \"pass\": \"" + gprsPass + "\"}";
+      request->send(200, "application/json", json);
     });
 }
 
 void MeteoConfigPortal::handleReboot() {
     server.on("/reboot", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        request->send(200, "text/plain", "Rebooting...");
-        delay(1000);
-        ESP.restart();
+      request->send(200, "text/plain", "Rebooting...");
+      delay(1000);
+      ESP.restart();
     });
 }
 
 void MeteoConfigPortal::handleRoot() {
     server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/html", index_html);
+      request->send_P(200, "text/html", index_html);
     });
 }
 
 void MeteoConfigPortal::handleGetTransferPriority() {
     server.on("/getPriority", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        request->send(200, "text/plain", String((int)transferPriority));
-    });
-}
-
-void MeteoConfigPortal::handleSetTransferPriority() {
-    server.on("/setPriority", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        if (request->hasParam("priority")) {
-            int val = request->getParam("priority")->value().toInt();
-            if (val >= PRIORITY_WIFI_ONLY && val < PRIORITIES_NUMBER) {
-                transferPriority = static_cast<DataPriority>(val);
-                EEPROM.write(TRANSFER_PRIORITY_ADDR, (uint8_t)transferPriority);
-                EEPROM.commit();
-                request->send(200, "text/plain", "Priority saved");
-                delay(1000);
-                ESP.restart();
-                return;
-            }
-        }
-        request->send(400, "text/plain", "Invalid priority");
+      request->send(200, "text/plain", String((int)transferPriority));
     });
 }
 
 void MeteoConfigPortal::handleGetMQTT() {
     server.on("/getMQTT", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        char broker[64], user[32], pass[32], clientId[32];
-        uint16_t port;
-        loadMQTTFromEEPROM(broker, port, user, pass, clientId);
-        String response = "{";
-        response += "\"broker\":\"" + String(broker) + "\",";
-        response += "\"port\":" + String(port) + ",";
-        response += "\"user\":\"" + String(user) + "\",";
-        response += "\"pass\":\"" + String(pass) + "\",";
-        response += "\"clientId\":\"" + String(clientId) + "\"";
-        response += "}";
-        request->send(200, "application/json", response);
+      char broker[64], user[32], pass[32], clientId[32];
+      uint16_t port;
+      loadMQTTFromEEPROM(broker, port, user, pass, clientId);
+      String response = "{";
+      response += "\"broker\":\"" + String(broker) + "\",";
+      response += "\"port\":" + String(port) + ",";
+      response += "\"user\":\"" + String(user) + "\",";
+      response += "\"pass\":\"" + String(pass) + "\",";
+      response += "\"clientId\":\"" + String(clientId) + "\"";
+      response += "}";
+      request->send(200, "application/json", response);
     });
 }
 
 void MeteoConfigPortal::handleSetMQTT() {
     server.on("/setMQTT", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        if (request->hasParam("broker") && request->hasParam("port") &&
-            request->hasParam("user") && request->hasParam("pass") &&
-            request->hasParam("clientId")) {
-            
-            String broker = request->getParam("broker")->value();
-            uint16_t port = request->getParam("port")->value().toInt();
-            String user = request->getParam("user")->value();
-            String pass = request->getParam("pass")->value();
-            String clientId = request->getParam("clientId")->value();
-            saveMQTTToEEPROM(broker, port, user, pass, clientId);
-            request->send(200, "text/plain", "MQTT settings saved");
-            delay(1000);
-            ESP.restart();
-        } else {
-            request->send(400, "text/plain", "Missing parameters");
-        }
+      if (request->hasParam("broker") && request->hasParam("port") &&
+        request->hasParam("user") && request->hasParam("pass") &&
+        request->hasParam("clientId")) {
+        
+        String broker = request->getParam("broker")->value();
+        uint16_t port = request->getParam("port")->value().toInt();
+        String user = request->getParam("user")->value();
+        String pass = request->getParam("pass")->value();
+        String clientId = request->getParam("clientId")->value();
+        saveMQTTToEEPROM(broker, port, user, pass, clientId);
+        request->send(200, "text/plain", "MQTT settings saved");
+        delay(1000);
+        ESP.restart();
+      } else {
+        request->send(400, "text/plain", "Missing parameters");
+      }
     });
 }
 
 void MeteoConfigPortal::handleGetFTP() {
     server.on("/getFTP", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        char ftpServer[32], ftpUser[32], ftpPass[32];
-        int addr = FTP_EEPROM_ADDR;
+      char ftpServer[32], ftpUser[32], ftpPass[32];
+      int addr = FTP_EEPROM_ADDR;
 
-        for (int i = 0; i < sizeof(ftpServer); i++) ftpServer[i] = EEPROM.read(addr++);
-        ftpServer[31] = '\0';  // Завершающий нуль-символ
-        for (int i = 0; i < sizeof(ftpUser); i++) ftpUser[i] = EEPROM.read(addr++);
-        ftpUser[31] = '\0';  // Завершающий нуль-символ
-        for (int i = 0; i < sizeof(ftpPass); i++) ftpPass[i] = EEPROM.read(addr++);
-        ftpPass[31] = '\0';  // Завершающий нуль-символ
+      for (int i = 0; i < sizeof(ftpServer); i++) ftpServer[i] = EEPROM.read(addr++);
+      ftpServer[31] = '\0';  // Завершающий нуль-символ
+      for (int i = 0; i < sizeof(ftpUser); i++) ftpUser[i] = EEPROM.read(addr++);
+      ftpUser[31] = '\0';  // Завершающий нуль-символ
+      for (int i = 0; i < sizeof(ftpPass); i++) ftpPass[i] = EEPROM.read(addr++);
+      ftpPass[31] = '\0';  // Завершающий нуль-символ
 
-        String json = "{";
-        json += "\"server\":\"" + String(ftpServer) + "\",";
-        json += "\"user\":\"" + String(ftpUser) + "\",";
-        json += "\"pass\":\"" + String(ftpPass) + "\"";
-        json += "}";
+      String json = "{";
+      json += "\"server\":\"" + String(ftpServer) + "\",";
+      json += "\"user\":\"" + String(ftpUser) + "\",";
+      json += "\"pass\":\"" + String(ftpPass) + "\"";
+      json += "}";
 
-        request->send(200, "application/json", json);
+      request->send(200, "application/json", json);
     });
 }
 
-void MeteoConfigPortal::handleSetFTP() {
-    server.on("/setFTP", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        if (request->hasParam("server") && request->hasParam("user") && request->hasParam("pass")) {
-            String serverVal = request->getParam("server")->value();
-            String userVal = request->getParam("user")->value();
-            String passVal = request->getParam("pass")->value();
+void MeteoConfigPortal::handleSetServers() {
+  server.on("/setServers", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    bool updated = false;
 
-            int addr = FTP_EEPROM_ADDR;
+    // HTTP сервер
+    if (request->hasParam("httpServer")) {
+      String serverVal = request->getParam("httpServer")->value();
+      int addr = HTTP_SERVER_EEPROM_ADDR;
 
-            for (int i = 0; i < 32; i++)
-                EEPROM.write(addr++, i < serverVal.length() ? serverVal[i] : 0);
-            for (int i = 0; i < 32; i++)
-                EEPROM.write(addr++, i < userVal.length() ? userVal[i] : 0);
-            for (int i = 0; i < 32; i++)
-                EEPROM.write(addr++, i < passVal.length() ? passVal[i] : 0);
+      for (int i = 0; i < 64; i++) {
+        EEPROM.write(addr++, i < serverVal.length() ? serverVal[i] : 0);
+      }
+      updated = true;
+    }
 
-            EEPROM.commit();
-            request->send(200, "text/plain", "FTP settings saved");
-        } else {
-            request->send(400, "text/plain", "Missing parameters");
-        }
-    });
+    // FTP сервер + логин + пароль
+    if (request->hasParam("ftpServer") && request->hasParam("ftpUser") && request->hasParam("ftpPass")) {
+      String serverVal = request->getParam("ftpServer")->value();
+      String userVal   = request->getParam("ftpUser")->value();
+      String passVal   = request->getParam("ftpPass")->value();
+
+      int addr = FTP_EEPROM_ADDR;
+
+      for (int i = 0; i < 32; i++)
+        EEPROM.write(addr++, i < serverVal.length() ? serverVal[i] : 0);
+      for (int i = 0; i < 32; i++)
+        EEPROM.write(addr++, i < userVal.length() ? userVal[i] : 0);
+      for (int i = 0; i < 32; i++)
+        EEPROM.write(addr++, i < passVal.length() ? passVal[i] : 0);
+
+      updated = true;
+    }
+
+    if (updated) {
+      EEPROM.commit();
+      request->send(200, "text/plain", "Settings saved");
+      delay(1000);
+      ESP.restart();
+    } else {
+      request->send(400, "text/plain", "Missing parameters");
+    }
+  });
 }
 
 void MeteoConfigPortal::handleGetHttpServer() {
-    server.on("/getHttpServer", HTTP_GET, [](AsyncWebServerRequest *request) {
-        char server[64];
-        int addr = HTTP_SERVER_EEPROM_ADDR;
+  server.on("/getHttpServer", HTTP_GET, [](AsyncWebServerRequest *request) {
+    char server[64];
+    int addr = HTTP_SERVER_EEPROM_ADDR;
 
-        for (int i = 0; i < 64; i++) {
-            server[i] = EEPROM.read(addr++);
-        }
-        server[63] = '\0';
+    for (int i = 0; i < 64; i++) {
+        server[i] = EEPROM.read(addr++);
+    }
+    server[63] = '\0';
 
-        request->send(200, "text/plain", String(server));
-    });
-}
-
-void MeteoConfigPortal::handleSetHttpServer() {
-    server.on("/setHttpServer", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (request->hasParam("server")) {
-            String serverVal = request->getParam("server")->value();
-            int addr = HTTP_SERVER_EEPROM_ADDR;
-
-            for (int i = 0; i < 64; i++) {
-                EEPROM.write(addr++, i < serverVal.length() ? serverVal[i] : 0);
-            }
-            EEPROM.commit();
-
-            request->send(200, "text/plain", "HTTP Server saved");
-        } else {
-            request->send(400, "text/plain", "Missing 'server' parameter");
-        }
-    });
+    request->send(200, "text/plain", String(server));
+  });
 }
 
 void MeteoConfigPortal::handleGetSensorData() {
-    server.on("/getSensorData", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        if (_cachedSensorJson.isEmpty()) {
-            request->send(500, "application/json", "{\"error\":\"No data\"}");
-        } else {
-            request->send(200, "application/json", _cachedSensorJson);
-        }
-    });
-}
-
-void MeteoConfigPortal::handleSensor() {
-    server.on("/sensor", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send_P(200, "text/html", sensor_html);
-    });
+  server.on("/getSensorData", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    if (_cachedSensorJson.isEmpty()) {
+      request->send(200, "application/json", "{\"Загрузка...\":\"Нет данных\"}");
+    } else {
+      request->send(200, "application/json", _cachedSensorJson);
+    }
+  });
 }
 
 void MeteoConfigPortal::handleSetDefaults() {
-    server.on("/setDefaults", HTTP_GET, [this](AsyncWebServerRequest *request) {        
-        for (int i = 10; i < EEPROM_SIZE; i++) {
-            EEPROM.write(i, 0);
-        }
-        EEPROM.commit();
-    
-        // Сброс всех настроек к значениям по умолчанию
-        saveWiFiSettings(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
-        saveGPRSSettings(APN_DEFAULT, GPRS_USER_DEFAULT, GPRS_PASS_DEFAULT);
-        saveMQTTToEEPROM(MQTT_BROKER_DEFAULT, MQTT_PORT_DEFAULT, MQTT_USERNAME_DEFAULT, MQTT_PASSWORD_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
-        saveFTPToEEPROM(FTP_SERVER_DEFAULT, FTP_USER_DEFAULT, FTP_PASS_DEFAULT);
-        saveHttpServerToEEPROM(HTTP_SERVER_DEFAULT);
-        saveDeviceId(0);
-        transferPriority = PRIORITY_WIFI_ONLY;
-        EEPROM.write(TRANSFER_PRIORITY_ADDR, (uint8_t)transferPriority);
-        EEPROM.commit();
-        
-        // Сброс списка устройств
-        meteoDevices.clear();
-        saveDevicesToEEPROM();
+  server.on("/setDefaults", HTTP_GET, [this](AsyncWebServerRequest *request) {        
+    for (int i = 10; i < EEPROM_SIZE; i++) {
+        EEPROM.write(i, 0);
+    }
+    EEPROM.commit();
 
-        request->send(200, "text/plain", "Default settings applied. Rebooting...");
-        delay(1000);
-        ESP.restart();
-    });
+    // Сброс всех настроек к значениям по умолчанию
+    saveWiFiSettings(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
+    saveGPRSSettings(APN_DEFAULT, GPRS_USER_DEFAULT, GPRS_PASS_DEFAULT);
+    saveMQTTToEEPROM(MQTT_BROKER_DEFAULT, MQTT_PORT_DEFAULT, MQTT_USERNAME_DEFAULT, MQTT_PASSWORD_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
+    saveFTPToEEPROM(FTP_SERVER_DEFAULT, FTP_USER_DEFAULT, FTP_PASS_DEFAULT);
+    saveHttpServerToEEPROM(HTTP_SERVER_DEFAULT);
+    saveDeviceId(0);
+    transferPriority = PRIORITY_WIFI_ONLY;
+    EEPROM.write(TRANSFER_PRIORITY_ADDR, (uint8_t)transferPriority);
+    EEPROM.commit();
+    
+    // Сброс списка устройств
+    meteoDevices.clear();
+    saveDevicesToEEPROM();
+
+    request->send(200, "text/plain", "Default settings applied. Rebooting...");
+    delay(1000);
+    ESP.restart();
+  });
 }
 
 // ==== Настройка веб-сервера ====
@@ -910,27 +1074,20 @@ void MeteoConfigPortal::setupWebServer() {
     handleSetDeviceId();
     handleGetDeviceId();
 
-    handleGetWiFi();
-    handleSetWiFi();
-
-    handleGetGPRS();
-    handleSetGPRS();
-
-    handleReboot();
-
-    handleGetTransferPriority();
-    handleSetTransferPriority();
+    handleSaveNetworkSettings();
+    handleGetWiFi();    
+    handleGetGPRS();    
+    handleGetTransferPriority();  
+    handleReboot();    
 
     handleGetMQTT();
     handleSetMQTT();
 
+    handleSetServers();
     handleGetFTP();
-    handleSetFTP();
-
     handleGetHttpServer();
-    handleSetHttpServer();
-    handleGetSensorData();
-    handleSensor();
+    
+    handleGetSensorData();    
 
     handleSetDefaults();
 }

@@ -1,14 +1,14 @@
 #include "TransmissionManager.h"
 #include <WiFi.h>
 #include "SerialMon.h"
+#include "ModbusSensor.h"
 
 //static Sim800Updater simUpdater;
 
 TransmissionManager::TransmissionManager()
     : _modem(SerialAT),
       _mqttClient(_modem),      
-      _mqtt(_mqttClient),
-      meteosensor(1)
+      _mqtt(_mqttClient)
 {    
     simClient = new Sim868Client(&_modem, &_mqttClient, &_mqtt);
 }
@@ -38,8 +38,11 @@ void TransmissionManager::begin() {
         mqttWifiClient.begin(_mqttServer, _mqttPort, _mqttUser, _mqttPass, _mqttClientId);
     }
     if(lastPriority == PRIORITY_WIFI_ONLY) simClient->modemPowerUp();
-    simClient->gnssPowerOn(); 
-    meteosensor.begin();    
+    simClient->gnssPowerOn();
+    std::vector<struct MeteoDevice> meteoDevices = meteoPortal.getMeteoDevices();
+    if (!meteoDevices.empty()) {        
+        meteosensor.begin(meteoDevices[0].id, meteoDevices[0].name=="SE-1" ? SE_1 : OTHER);
+    }
 }
 
 void TransmissionManager::loop() {
@@ -115,7 +118,7 @@ bool TransmissionManager::readSensorData() {
     if ((millis() - lastPollTime) >= 2000) { // Таймаут опроса 2 секунды
         lastPollTime = millis();        
         
-        if (meteosensor.readSensorData(sensorData, false)) {
+        if (meteosensor.readSensorData(sensorData)) {
             SerialMon.printf("Gas1: %.2f ppm, PM2.5: %.2f µg/m³, Humidity: %.1f%%\n",
                         sensorData.gas1, sensorData.pm25, sensorData.humidity);
             return true; // Данные успешно считаны
@@ -201,15 +204,15 @@ String TransmissionManager::getSensorDataJson() {
     const SensorData& d = sensorData;
 
     String json = "{";
-    json += "\"gas1\":" + String(d.gas1, 2) + ",";
-    json += "\"gas2\":" + String(d.gas2, 2) + ",";
-    json += "\"gas3\":" + String(d.gas3, 2) + ",";
-    json += "\"gas4\":" + String(d.gas4, 2) + ",";
-    json += "\"internalTemp\":" + String(d.internalTemp, 2) + ",";
-    json += "\"pm25\":" + String(d.pm25, 2) + ",";
-    json += "\"pm10\":" + String(d.pm10, 2) + ",";
-    json += "\"externalTemp\":" + String(d.externalTemp, 2) + ",";
-    json += "\"humidity\":" + String(d.humidity, 2);
+    json += "\"CO\":" + String(d.gas1, 2) + ",";
+    json += "\"NO2\":" + String(d.gas2, 2) + ",";
+    json += "\"SO\":" + String(d.gas3, 2) + ",";
+    json += "\"O3\":" + String(d.gas4, 2) + ",";
+    json += "\"Температура платы\":" + String(d.internalTemp, 2) + ",";
+    json += "\"PM2.5\":" + String(d.pm25, 2) + ",";
+    json += "\"PM10\":" + String(d.pm10, 2) + ",";
+    json += "\"Температура воздуха\":" + String(d.externalTemp, 2) + ",";
+    json += "\"Влажность воздуха\":" + String(d.humidity, 2);
     json += "}";
 
     return json;
